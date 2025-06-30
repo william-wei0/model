@@ -45,6 +45,7 @@ def load_tracks_and_spots(folder, cart_labels, second_labels):
             label_dict = cart_labels
 
         if prefix_base not in label_dict:
+            print(f"{prefix_base} cannot be found in annotation")
             continue
 
         try:
