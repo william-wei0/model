@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-import umap
+# import umap
 
 # ==== Directory setup ====
 os.makedirs("./Model", exist_ok=True)
@@ -75,7 +75,7 @@ class_weights = torch.tensor(len(y_encoded) / (len(np.unique(y_encoded)) * class
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-# ==== Training Loop ====
+# ==== evaluation Loop ====
 def evaluate(loader):
     model.eval()
     total, correct = 0, 0
@@ -167,31 +167,33 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("./Results/track/track_roc_curve.png")
 
-    # ==== Dimensionality Reduction ====
-    X_np = X_tensor.numpy()
-    y_np = y_tensor.numpy()
-
+    # ==== PCA on model output ====
+    model.eval()
+    with torch.no_grad():
+        logits = model(X_tensor).numpy()
     pca = PCA(n_components=2)
-    pca_result = pca.fit_transform(X_np)
+    pca_result = pca.fit_transform(logits)
+    y_np = y_tensor.numpy()
     plt.figure()
-    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], hue=le.inverse_transform(y_np), palette="Set1")
+    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], 
+                    hue=le.inverse_transform(y_np), palette="Set1", alpha=0.7)
     plt.title("PCA Visualization")
     plt.savefig("./Results/track/track_pca.png")
-
+    '''
     tsne = TSNE(n_components=2, random_state=42)
     tsne_result = tsne.fit_transform(X_np)
     plt.figure()
     sns.scatterplot(x=tsne_result[:,0], y=tsne_result[:,1], hue=le.inverse_transform(y_np), palette="Set2")
     plt.title("t-SNE Visualization")
     plt.savefig("./Results/track/track_tsne.png")
-
+    
     reducer = umap.UMAP(random_state=42)
     umap_result = reducer.fit_transform(X_np)
     plt.figure()
     sns.scatterplot(x=umap_result[:,0], y=umap_result[:,1], hue=le.inverse_transform(y_np), palette="Set3")
     plt.title("UMAP Visualization")
     plt.savefig("./Results/track/track_umap.png")
-
+    '''
     # ==== Save Model ====
     torch.save(model.state_dict(), "./Model/track_model.pth")
     print("Model saved to ./Model/track_model.pth")

@@ -5,18 +5,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # 使用非交互式后端以便保存图像
+matplotlib.use('Agg')  
 from Step3_spotmodel import BiLSTMAttnModel
-from Config import *  # 假设 Config.py 包含必要的配置
+from Config import *  
 # === Step 1: 加载数据并修正维度 ===
 data = np.load(f"./Data/trajectory_dataset_{SEQ_LEN}.npz")
 X, y = data["X"], data["y"]
 MODEL_PATH=f"./Model/Model_best_{SEQ_LEN}.pth"
 print("原始 X shape:", X.shape)  # 检查原始 shape
 
-# 修复 shape: 如果是 (N, 11, 20)，转为 (N, 20, 11)
-if X.shape[1] == 11 and X.shape[2] == 20:
-    print("⚠️ 检测到维度顺序错误，执行 transpose...")
+# fix shape, e.g.from (N, 11, 20) to (N, 20, 11)
+if X.shape[1] == FEATURE_LEN and X.shape[2] == 20:
+    print("wrong dimention, doing transpose...")
     X = np.transpose(X, (0, 2, 1))  # (N, 20, 11)
 
 print("修正后 X shape:", X.shape)  # 应为 (N, 20, 11)
@@ -42,7 +42,7 @@ class WrappedModel(torch.nn.Module):
         logits, _ = self.base(x)
         return logits
 
-model = BiLSTMAttnModel(input_dim=11, hidden_dim=64, output_dim=3, dropout=0.3)
+model = BiLSTMAttnModel(input_dim=FEATURE_LEN, hidden_dim=64, output_dim=3, dropout=0.3)
 model.load_state_dict(torch.load(MODEL_PATH))
 model.eval()
 wrapped_model = WrappedModel(model)

@@ -17,8 +17,8 @@ TRACK_DATA_PATH = f"{DATA_DIR}/track_dataset.npz"
 RESULT_DIR = f"./Results/Fusion_{SEQ_LEN}"
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 # === Load Data ===
 def load_data():
@@ -44,7 +44,7 @@ def build_track_id_to_label_map(track_ids, y):
     mapping = {}
     for i, tid in enumerate(track_ids):
         key = tuple(tid) if isinstance(tid, (list, tuple, np.ndarray)) else (tid,)
-        mapping[key] = str(y[i])  # ✅ 强制转换为字符串
+        mapping[key] = str(y[i])  # force convert into string
     print(f"[DEBUG] Track ID label map built: {len(mapping)} entries")
     return mapping
 
@@ -63,8 +63,10 @@ def predict_with_models(X_seq, X_track, track_ids_seq, track_ids_track, track_la
 
     print("Generating predictions...")
     with torch.no_grad():
-        pred_seq = F.softmax(model_seq(torch.tensor(X_seq, dtype=torch.float32).to(device))[0], dim=1).cpu().numpy()
-        pred_track = F.softmax(model_track(torch.tensor(X_track, dtype=torch.float32).to(device)), dim=1).cpu().numpy()
+        pred_seq = F.softmax(model_seq(torch.tensor(X_seq, dtype=torch.float32
+                                                    ).to(device))[0], dim=1).cpu().numpy()
+        pred_track = F.softmax(model_track(torch.tensor(X_track, dtype=torch.float32
+                                                        ).to(device)), dim=1).cpu().numpy()
 
     print("Mapping predictions to track IDs...")
     seq_map, track_map = {}, {}
@@ -91,7 +93,7 @@ def predict_with_models(X_seq, X_track, track_ids_seq, track_ids_track, track_la
 def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
     print("Training fusion classifier...")
 
-    # ✅ 将所有标签转成字符串，避免 float 被误识为连续值
+    # all label converted to string，avoid reading float as continue number
     y_true = np.array(y_true).astype(str)
 
     le = LabelEncoder()
