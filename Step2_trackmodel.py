@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-# import umap
+import umap
 
 # ==== Directory setup ====
 os.makedirs("./Model", exist_ok=True)
@@ -179,7 +179,9 @@ if __name__ == "__main__":
                     hue=le.inverse_transform(y_np), palette="Set1", alpha=0.7)
     plt.title("PCA Visualization")
     plt.savefig("./Results/track/track_pca.png")
-    '''
+    
+    X_np = X_tensor.numpy()
+    y_np = y_tensor.numpy()
     tsne = TSNE(n_components=2, random_state=42)
     tsne_result = tsne.fit_transform(X_np)
     plt.figure()
@@ -193,7 +195,7 @@ if __name__ == "__main__":
     sns.scatterplot(x=umap_result[:,0], y=umap_result[:,1], hue=le.inverse_transform(y_np), palette="Set3")
     plt.title("UMAP Visualization")
     plt.savefig("./Results/track/track_umap.png")
-    '''
+
     # ==== Save Model ====
     torch.save(model.state_dict(), "./Model/track_model.pth")
     print("Model saved to ./Model/track_model.pth")
