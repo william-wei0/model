@@ -10,6 +10,7 @@ from sklearn.preprocessing import LabelEncoder, label_binarize
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, roc_curve, auc
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+import umap
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -131,17 +132,51 @@ def train_model():
 
     return train_losses, val_losses, val_accs
 
+def pca_plot(ctx_vecs):
+    pca = PCA(n_components=2)
+    ctx_pca = pca.fit_transform(ctx_vecs)
+    sns.scatterplot(x=ctx_pca[:,0], y=ctx_pca[:,1],
+                    hue=le.inverse_transform(y_encoded.numpy()))
+    plt.title("PCA of Attention Outputs")
+    plt.savefig(f"{RESULT_DIR}/pca_attention.png")
+    plt.close()
+    
+def tsne_plot(ctx_vecs, per_para=30):
+    tsne = TSNE(perplexity=per_para, random_state=42)
+    ctx_tsne = tsne.fit_transform(ctx_vecs)
+
+    plt.figure(figsize=(6, 5))
+    sns.scatterplot(x=ctx_tsne[:,0], y=ctx_tsne[:,1],
+                    hue=le.inverse_transform(y_encoded.numpy()), alpha=0.7)
+    plt.title("t-SNE of Attention Vectors")
+    plt.tight_layout()
+    plt.savefig(f"{RESULT_DIR}/tsne/tsne_attention_{per_para}.png")
+    plt.close()
+
+def umap_plot(ctx_vecs, nei_para=15):
+    reducer = umap.UMAP(n_neighbors=nei_para, min_dist=0.5)
+    ctx_umap = reducer.fit_transform(ctx_vecs)
+
+    plt.figure(figsize=(6, 5))
+    sns.scatterplot(x=ctx_umap[:,0], y=ctx_umap[:,1],
+                    hue=le.inverse_transform(y_encoded.numpy()), alpha=0.7)
+    plt.title("UMAP of Attention Vectors")
+    plt.tight_layout()
+    plt.savefig(f"{RESULT_DIR}/umap/umap_attention_{nei_para}.png")
+    plt.close()
+
+
 # ===== Main =====
 if __name__ == "__main__":
     if os.path.exists(MODEL_PATH):
         print("Loading existing model...")
-        model.load_state_dict(torch.load(MODEL_PATH))
+        model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
         logs = np.load(f"{RESULT_DIR}/training_logs.npz")
         train_losses, val_losses, val_accs = logs['train_losses'], logs['val_losses'], logs['val_accuracies']
     else:
         print("Training model from scratch...")
         train_losses, val_losses, val_accs = train_model()
-
+    
     # Plot training curve
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
@@ -194,8 +229,8 @@ if __name__ == "__main__":
     plt.title("Mean Attention")
     plt.savefig(f"{RESULT_DIR}/attention_weights.png")
     plt.close()
-
-    # PCA Visualization
+    
+    # PCA, TSNE, UMAP Visualization
     ctx_vecs = []
     with torch.no_grad():
         for i in range(0, X.shape[0], 64):
@@ -204,9 +239,10 @@ if __name__ == "__main__":
             ctx_vecs.append(ctx)
     ctx_vecs = torch.cat(ctx_vecs, dim=0).numpy()
 
-    pca = PCA(n_components=2)
-    ctx_pca = pca.fit_transform(ctx_vecs)
-    sns.scatterplot(x=ctx_pca[:,0], y=ctx_pca[:,1], hue=le.inverse_transform(y_encoded.numpy()))
-    plt.title("PCA of Attention Outputs")
-    plt.savefig(f"{RESULT_DIR}/pca_attention.png")
-    plt.close()
+    pca_plot(ctx_vecs)
+    tsne_plot(ctx_vecs)
+    umap_plot(ctx_vecs, 100)
+
+        
+        
+    
