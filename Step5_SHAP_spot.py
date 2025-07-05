@@ -9,9 +9,9 @@ matplotlib.use('Agg')
 from Step3_spotmodel import BiLSTMAttnModel
 from Config import *  
 # === Step 1: Load Data ===
-data = np.load(f"./Data/trajectory_dataset_{SEQ_LEN}.npz")
+data = np.load(f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz")
 X, y = data["X"], data["y"]
-MODEL_PATH=f"./Model/Model_best_{SEQ_LEN}.pth"
+MODEL_PATH=f"{MODEL_DIR}/Model_best_{SEQ_LEN}.pth"
 print("X shape:", X.shape)  # (N, 11, 20)
 
 # fix shape:  (N, 11, 20)-> (N, 20, 11)
@@ -42,7 +42,7 @@ class WrappedModel(torch.nn.Module):
         logits, _ = self.base(x)
         return logits
 
-model = BiLSTMAttnModel(input_dim=11, hidden_dim=64, output_dim=3, dropout=0.3)
+model = BiLSTMAttnModel(input_dim=FEATURE_LEN, hidden_dim=64, output_dim=3, dropout=0.3)
 model.load_state_dict(torch.load(MODEL_PATH))
 model.eval()
 wrapped_model = WrappedModel(model)
@@ -81,7 +81,7 @@ for class_id in range(C):
     sns.barplot(data=df, x="Importance", y="Feature")
     plt.title(f"Mean SHAP Feature Importance - Class {class_id}")
     plt.tight_layout()
-    plt.savefig(f"./Results/{SEQ_LEN}/shap_bar_class{class_id}.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/shap_bar_class{class_id}.png")
     plt.close()
     print(f"Saved shap_bar_class{class_id}.png")
 
@@ -97,6 +97,6 @@ plt.figure(figsize=(11, 5))
 sns.barplot(data=df_all, x="Importance", y="Feature")
 plt.title("Overall SHAP Feature Importance (All Classes)")
 plt.tight_layout()
-plt.savefig(f"./Results/{SEQ_LEN}/shap_bar_overall.png")
+plt.savefig(f"{SEQ_RESULT_DIR}/shap_bar_overall.png")
 plt.close()
 print("Saved shap_bar_overall.png")

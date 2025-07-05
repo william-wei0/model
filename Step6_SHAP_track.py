@@ -9,13 +9,11 @@ import matplotlib
 matplotlib.use('Agg') 
 
 from Step2_trackmodel import TrackNet
-from Config import track_features
+from Config import *
 
 # === Config ===
-MODEL_PATH = "./Model/track_model.pth"
-DATA_PATH = "./Data/track_dataset.npz"
-RESULT_DIR = "./Results/track"
-os.makedirs(RESULT_DIR, exist_ok=True)
+MODEL_PATH = f"{MODEL_DIR}/track_model.pth"
+DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
 
 # === Step 1: Load dataset ===
 print("[STEP 1] Loading data...")
@@ -85,7 +83,7 @@ for class_id in range(C):
     sns.barplot(data=df, x="Importance", y="Feature")
     plt.title(f"Mean SHAP Feature Importance - Class {class_id}")
     plt.tight_layout()
-    out_path = os.path.join(RESULT_DIR, f"shap_bar_class{class_id}.png")
+    out_path = os.path.join(TRACK_RESULT_DIR, f"shap_bar_class{class_id}.png")
     plt.savefig(out_path)
     plt.close()
     print(f"[INFO] Saved SHAP bar plot: {out_path}")
@@ -102,7 +100,7 @@ plt.figure(figsize=(10, 5))
 sns.barplot(data=df_mean, x="Importance", y="Feature")
 plt.title("Mean SHAP Feature Importance - Averaged Across Classes")
 plt.tight_layout()
-avg_path = os.path.join(RESULT_DIR, "shap_bar_overall.png")
+avg_path = os.path.join(TRACK_RESULT_DIR, "shap_bar_overall.png")
 plt.savefig(avg_path)
 plt.close()
 print(f"[INFO] Saved overall SHAP importance plot: {avg_path}")
