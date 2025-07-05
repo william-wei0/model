@@ -80,11 +80,10 @@ spots_df, tracks_df = load_tracks_and_spots(
 # === Step 3: Filter Valid Trajectories ===
 def filter_valid_trajectories(spots_df, tracks_df, min_frames=10):
     valid_ids = tracks_df[tracks_df["NUMBER_SPOTS"] >= min_frames][["PREFIX", "TRACK_ID"]]
-    spots_df_filtered = spots_df.merge(valid_ids, on=["PREFIX", "TRACK_ID"], how="inner")
-    tracks_df_filtered = tracks_df[tracks_df["NUMBER_SPOTS"] >= min_frames]
-    return spots_df_filtered, tracks_df_filtered
+    spots_filtered = spots_df.merge(valid_ids, on=["PREFIX", "TRACK_ID"], how="inner")
+    return spots_filtered
 
-spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
+spots_df = filter_valid_trajectories(spots_df, tracks_df)
 
 # === Step 4: Compute Features ===
 #features = [
@@ -117,10 +116,10 @@ def align_and_save_dataset(spots_df, features, seq_len=20, output_prefix="trajec
     rows = []
 
     for prefix, group_df in spots_df.groupby("PREFIX"):
-        # features_except_dir = [f for f in features if f != "DIRECTION"]
+        features_except_dir = [f for f in features if f != "DIRECTION"]
         scaler = StandardScaler()
-        # scaler.fit(group_df[features_except_dir])
-        scaler.fit(group_df[features])
+        scaler.fit(group_df[features_except_dir])
+
         for (p, tid), traj in group_df.groupby(["PREFIX", "TRACK_ID"]):
             feat = traj[features].values
             if len(feat) >= seq_len:
@@ -130,8 +129,8 @@ def align_and_save_dataset(spots_df, features, seq_len=20, output_prefix="trajec
                 feat = np.vstack([feat, pad])
 
             feat_scaled = feat.copy()
-            df_temp = pd.DataFrame(feat, columns=features)
-            feat_scaled = scaler.transform(df_temp)
+            df_temp = pd.DataFrame(feat[:, :-1], columns=features_except_dir)
+            feat_scaled[:, :-1] = scaler.transform(df_temp)
 
             X_list.append(feat_scaled)
             y_list.append(traj["LABEL"].iloc[0])

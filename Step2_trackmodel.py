@@ -57,7 +57,7 @@ test_loader = DataLoader(test_set, batch_size=BATCH_SIZE)
 # ==== Define Model ====
 class TrackNet(nn.Module):
     def __init__(self, input_dim, hidden_dim=64, num_classes=3):
-        super().__init__()
+        super(TrackNet, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -75,7 +75,7 @@ class_weights = torch.tensor(len(y_encoded) / (len(np.unique(y_encoded)) * class
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-# ==== evaluation Loop ====
+# ==== Training Loop ====
 def evaluate(loader):
     model.eval()
     total, correct = 0, 0
@@ -167,7 +167,18 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("./Results/track/track_roc_curve.png")
 
-    # ==== PCA on model output ====
+    # ==== Dimensionality Reduction ====
+    X_np = X_tensor.numpy()
+    y_np = y_tensor.numpy()
+
+# ==== PCA on input features ====
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(X_np)
+    plt.figure()
+    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], hue=le.inverse_transform(y_np), palette="Set1")
+    plt.title("PCA Visualization")
+    plt.savefig("./Results/track/track_pca.png")
+# ==== PCA on model output ====
     model.eval()
     with torch.no_grad():
         logits = model(X_tensor).numpy()
@@ -175,20 +186,19 @@ if __name__ == "__main__":
     pca_result = pca.fit_transform(logits)
     y_np = y_tensor.numpy()
     plt.figure()
-    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], 
+    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1],
                     hue=le.inverse_transform(y_np), palette="Set1", alpha=0.7)
     plt.title("PCA Visualization")
     plt.savefig("./Results/track/track_pca.png")
-    
-    X_np = X_tensor.numpy()
-    y_np = y_tensor.numpy()
+
+# ==== t-SNE and UMAP ====
     tsne = TSNE(n_components=2, random_state=42)
     tsne_result = tsne.fit_transform(X_np)
     plt.figure()
     sns.scatterplot(x=tsne_result[:,0], y=tsne_result[:,1], hue=le.inverse_transform(y_np), palette="Set2")
     plt.title("t-SNE Visualization")
     plt.savefig("./Results/track/track_tsne.png")
-    
+
     reducer = umap.UMAP(random_state=42)
     umap_result = reducer.fit_transform(X_np)
     plt.figure()
