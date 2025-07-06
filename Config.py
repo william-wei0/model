@@ -42,7 +42,7 @@ track_features = [ # Track-Level Statistics Features
 ]
 
 # ======= CONSTANTS =======
-FEATURE_LEN = len(features) # = 11
+FEATURE_LEN = len(features) # = 9
 TRACK_LEN = len(track_features) # = 12
 
 # Run Step1 if you haven't yet to generate the dataset, or any changes to the dataset.
