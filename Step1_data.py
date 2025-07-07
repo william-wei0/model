@@ -19,8 +19,8 @@ def load_annotations(path, is_second_batch=False):
     print("Total entries:", len(mapping))
     return mapping
 
-cart_labels = load_annotations("./Data/CART annotations.xlsx", is_second_batch=False)
-second_labels = load_annotations("./Data/2nd batch annotations.xlsx", is_second_batch=True)
+cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx", is_second_batch=False)
+second_labels = load_annotations(f"{DATA_DIR}/2nd batch annotations.xlsx", is_second_batch=True)
 
 # === Step 2: Load Track/Spot Files ===
 def load_tracks_and_spots(folder, cart_labels, second_labels):
@@ -72,7 +72,7 @@ def load_tracks_and_spots(folder, cart_labels, second_labels):
     return spots_df, tracks_df
 
 spots_df, tracks_df = load_tracks_and_spots(
-    folder="./Data/TRACK",
+    folder=f"{DATA_DIR}/TRACK",
     cart_labels=cart_labels,
     second_labels=second_labels
 )
@@ -144,12 +144,12 @@ def align_and_save_dataset(spots_df, features, seq_len=20, output_prefix="trajec
     X = np.array(X_list)
     y = np.array(y_list)
     track_ids = np.array(track_id_list, dtype=object)
-    np.savez(f"./Data/{output_prefix}_{seq_len}.npz", X=X, y=y, track_ids=track_ids)
+    np.savez(f"{GENERATED_DIR}/{output_prefix}_{seq_len}.npz", X=X, y=y, track_ids=track_ids)
 
     df_out = pd.DataFrame(rows, columns=["SampleID", "Frame"] + features)
-    df_out.to_csv(f"./Data/{output_prefix}_{seq_len}.csv", index=False)
+    df_out.to_csv(f"{GENERATED_DIR}/{output_prefix}_{seq_len}.csv", index=False)
 
-    print(f"Saved: ./Data/{output_prefix}_{seq_len}.npz & .csv | Shape: {X.shape}")
+    print(f"Saved: {GENERATED_DIR}/{output_prefix}_{seq_len}.npz & .csv | Shape: {X.shape}")
 
 # === Step 6: Save Track-Level Dataset ===
 '''track_features = [
@@ -189,12 +189,12 @@ def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_pref
             records.append(record)
 
     df_final = pd.DataFrame(records)
-    df_final.to_csv(f"./Data/{output_prefix}.csv", index=False)
-    np.savez(f"./Data/{output_prefix}.npz", 
+    df_final.to_csv(f"{GENERATED_DIR}/{output_prefix}.csv", index=False)
+    np.savez(f"{GENERATED_DIR}/{output_prefix}.npz", 
              X=df_final[track_features].values, 
              y=df_final["LABEL"].values,
              track_ids=df_final[["PREFIX", "TRACK_ID"]].values)
-    print(f"Saved: ./Data/{output_prefix}.csv & .npz")
+    print(f"Saved: {GENERATED_DIR}/{output_prefix}.csv & .npz")
 
 build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix="track_dataset")
 

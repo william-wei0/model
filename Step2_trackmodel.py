@@ -13,10 +13,8 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import umap
+from Config import *
 
-# ==== Directory setup ====
-os.makedirs("./Model", exist_ok=True)
-os.makedirs("./Results/track", exist_ok=True)
 
 # ==== Configuration ====
 BATCH_SIZE = 32
@@ -26,7 +24,7 @@ VAL_RATIO = 0.2
 TEST_RATIO = 0.2
 
 # ==== Load Data ====
-data = np.load("./Data/track_dataset.npz")
+data = np.load(f"{GENERATED_DIR}/track_dataset.npz")
 X = data['X']
 y = data['y']
 
@@ -75,7 +73,7 @@ class_weights = torch.tensor(len(y_encoded) / (len(np.unique(y_encoded)) * class
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-# ==== evaluation Loop ====
+# ==== EvaluationLoop ====
 def evaluate(loader):
     model.eval()
     total, correct = 0, 0
@@ -141,7 +139,7 @@ if __name__ == "__main__":
     fig.tight_layout()
     fig.legend(loc="lower center", bbox_to_anchor=(0.5, -0.15), ncol=3)
     plt.title("Training Loss and Accuracy")
-    plt.savefig("./Results/track/track_loss_accuracy_combined.png")
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_loss_accuracy_combined.png")
 
     # ==== Confusion Matrix ====
     plt.figure(figsize=(6,5))
@@ -150,7 +148,7 @@ if __name__ == "__main__":
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.tight_layout()
-    plt.savefig("./Results/track/track_confusion_matrix.png")
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_confusion_matrix.png")
 
     # ==== ROC Curve ====
     n_classes = len(le.classes_)
@@ -165,8 +163,19 @@ if __name__ == "__main__":
     plt.title("ROC Curve (1-vs-Rest)")
     plt.legend()
     plt.tight_layout()
-    plt.savefig("./Results/track/track_roc_curve.png")
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_roc_curve.png")
 
+    # ==== Dimensionality Reduction ====
+    X_np = X_tensor.numpy()
+    y_np = y_tensor.numpy()
+
+    # ==== PCA on input features ====
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(X_np)
+    plt.figure()
+    sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], hue=le.inverse_transform(y_np), palette="Set1")
+    plt.title("PCA Visualization")
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_pca.png")
     # ==== PCA on model output ====
     model.eval()
     with torch.no_grad():
@@ -178,8 +187,9 @@ if __name__ == "__main__":
     sns.scatterplot(x=pca_result[:,0], y=pca_result[:,1], 
                     hue=le.inverse_transform(y_np), palette="Set1", alpha=0.7)
     plt.title("PCA Visualization")
-    plt.savefig("./Results/track/track_pca.png")
-    
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_pca.png")
+
+# ==== t-SNE and UMAP ====
     X_np = X_tensor.numpy()
     y_np = y_tensor.numpy()
     tsne = TSNE(n_components=2, random_state=42)
@@ -187,15 +197,15 @@ if __name__ == "__main__":
     plt.figure()
     sns.scatterplot(x=tsne_result[:,0], y=tsne_result[:,1], hue=le.inverse_transform(y_np), palette="Set2")
     plt.title("t-SNE Visualization")
-    plt.savefig("./Results/track/track_tsne.png")
-    
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_tsne.png")
+
     reducer = umap.UMAP(random_state=42)
     umap_result = reducer.fit_transform(X_np)
     plt.figure()
     sns.scatterplot(x=umap_result[:,0], y=umap_result[:,1], hue=le.inverse_transform(y_np), palette="Set3")
     plt.title("UMAP Visualization")
-    plt.savefig("./Results/track/track_umap.png")
+    plt.savefig(f"{TRACK_RESULT_DIR}/track_umap.png")
 
     # ==== Save Model ====
-    torch.save(model.state_dict(), "./Model/track_model.pth")
-    print("Model saved to ./Model/track_model.pth")
+    torch.save(model.state_dict(), f"{MODEL_DIR}/track_model.pth")
+    print(f"Model saved to {MODEL_DIR}/track_model.pth")

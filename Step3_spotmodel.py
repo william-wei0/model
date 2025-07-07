@@ -10,18 +10,15 @@ from sklearn.preprocessing import LabelEncoder, label_binarize
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, roc_curve, auc
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-import umap
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
+import umap
 from Config import *  # Assuming Config.py contains necessary configurations
 # ===== Global Config =====
-DATA_PATH = f"./Data/trajectory_dataset_{SEQ_LEN}.npz"
-MODEL_PATH = f"./Model/model_best_{SEQ_LEN}.pth"
-RESULT_DIR = f"./Results/{SEQ_LEN}"
-os.makedirs("./Model", exist_ok=True)
-os.makedirs(RESULT_DIR, exist_ok=True)
+DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
+MODEL_PATH = f"{MODEL_DIR}/model_best_{SEQ_LEN}.pth"
 
 # ===== Load Data =====
 data = np.load(DATA_PATH)
@@ -128,7 +125,7 @@ def train_model():
 
     model.load_state_dict(best_model)
     torch.save(model.state_dict(), MODEL_PATH)
-    np.savez(f"{RESULT_DIR}/training_logs.npz", train_losses=train_losses, val_losses=val_losses, val_accuracies=val_accs)
+    np.savez(f"{SEQ_RESULT_DIR}/training_logs.npz", train_losses=train_losses, val_losses=val_losses, val_accuracies=val_accs)
 
     return train_losses, val_losses, val_accs
 
@@ -138,7 +135,7 @@ def pca_plot(ctx_vecs):
     sns.scatterplot(x=ctx_pca[:,0], y=ctx_pca[:,1],
                     hue=le.inverse_transform(y_encoded.numpy()))
     plt.title("PCA of Attention Outputs")
-    plt.savefig(f"{RESULT_DIR}/pca_attention.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/pca_attention.png")
     plt.close()
     
 def tsne_plot(ctx_vecs, per_para=30):
@@ -150,7 +147,7 @@ def tsne_plot(ctx_vecs, per_para=30):
                     hue=le.inverse_transform(y_encoded.numpy()), alpha=0.7)
     plt.title("t-SNE of Attention Vectors")
     plt.tight_layout()
-    plt.savefig(f"{RESULT_DIR}/tsne/tsne_attention_{per_para}.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/tsne_attention_{per_para}.png")
     plt.close()
 
 def umap_plot(ctx_vecs, nei_para=15):
@@ -162,7 +159,7 @@ def umap_plot(ctx_vecs, nei_para=15):
                     hue=le.inverse_transform(y_encoded.numpy()), alpha=0.7)
     plt.title("UMAP of Attention Vectors")
     plt.tight_layout()
-    plt.savefig(f"{RESULT_DIR}/umap/umap_attention_{nei_para}.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/umap_attention_{nei_para}.png")
     plt.close()
 
 
@@ -170,24 +167,24 @@ def umap_plot(ctx_vecs, nei_para=15):
 if __name__ == "__main__":
     if os.path.exists(MODEL_PATH):
         print("Loading existing model...")
-        model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
-        logs = np.load(f"{RESULT_DIR}/training_logs.npz")
+        model.load_state_dict(torch.load(MODEL_PATH,weights_only=True))
+        logs = np.load(f"{SEQ_RESULT_DIR}/training_logs.npz")
         train_losses, val_losses, val_accs = logs['train_losses'], logs['val_losses'], logs['val_accuracies']
     else:
         print("Training model from scratch...")
         train_losses, val_losses, val_accs = train_model()
-    
+
     # Plot training curve
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
     plt.legend()
     plt.title("Loss Curve")
-    plt.savefig(f"{RESULT_DIR}/loss_curve.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/loss_curve.png")
     plt.close()
 
     plt.plot(np.array(val_accs)*100)
     plt.title("Validation Accuracy (%)")
-    plt.savefig(f"{RESULT_DIR}/val_accuracy.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/val_accuracy.png")
     plt.close()
 
     # Evaluate
@@ -207,7 +204,7 @@ if __name__ == "__main__":
     cm = confusion_matrix(y_true, y_pred)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
     plt.title("Confusion Matrix")
-    plt.savefig(f"{RESULT_DIR}/confusion_matrix.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/confusion_matrix.png")
     plt.close()
 
     # ROC
@@ -220,17 +217,17 @@ if __name__ == "__main__":
     plt.plot([0, 1], [0, 1], 'k--')
     plt.legend()
     plt.title("ROC Curve")
-    plt.savefig(f"{RESULT_DIR}/roc_curve.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/roc_curve.png")
     plt.close()
 
     # Attention Heatmap
     mean_attn = np.mean(attns, axis=0)
     sns.heatmap(mean_attn[np.newaxis, :], cmap='viridis', cbar=True)
     plt.title("Mean Attention")
-    plt.savefig(f"{RESULT_DIR}/attention_weights.png")
+    plt.savefig(f"{SEQ_RESULT_DIR}/attention_weights.png")
     plt.close()
-    
-    # PCA, TSNE, UMAP Visualization
+
+    # PCA Visualization
     ctx_vecs = []
     with torch.no_grad():
         for i in range(0, X.shape[0], 64):
@@ -238,11 +235,6 @@ if __name__ == "__main__":
             ctx, _ = model.attn(out)
             ctx_vecs.append(ctx)
     ctx_vecs = torch.cat(ctx_vecs, dim=0).numpy()
-
     pca_plot(ctx_vecs)
     tsne_plot(ctx_vecs)
     umap_plot(ctx_vecs, 100)
-
-        
-        
-    
