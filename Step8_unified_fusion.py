@@ -58,23 +58,8 @@ def load_and_align_data():
     print(f"[DEBUG] Matched pairs: {len(X_seq_matched)}")
     return np.array(X_seq_matched), np.array(X_track_matched), np.array(y_matched)
 
-X_seq, X_track, y = load_and_align_data()
-le = LabelEncoder()
-y_encoded = le.fit_transform(y)
 
-X_seq_train, X_seq_test, X_track_train, X_track_test, y_train, y_test = train_test_split(
-    X_seq, X_track, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
-X_seq_train = torch.tensor(X_seq_train, dtype=torch.float32)
-X_seq_test = torch.tensor(X_seq_test, dtype=torch.float32)
-X_track_train = torch.tensor(X_track_train, dtype=torch.float32)
-X_track_test = torch.tensor(X_track_test, dtype=torch.float32)
-y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-y_test_tensor = torch.tensor(y_test, dtype=torch.long)
-
-train_dataset = TensorDataset(X_seq_train, X_track_train, y_train_tensor)
-test_dataset = TensorDataset(X_seq_test, X_track_test, y_test_tensor)
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
 # === 模型定义 ===
 class UnifiedFusionModel(nn.Module):
@@ -95,38 +80,60 @@ class UnifiedFusionModel(nn.Module):
         fused = torch.cat([lstm_feat, track_feat], dim=1)
         return self.fusion_fc(fused)
 
-model = UnifiedFusionModel().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-criterion = nn.CrossEntropyLoss()
 
-print("[STEP 2] Training unified fusion model...")
-for epoch in range(50):
-    model.train()
-    total_loss = 0
-    for batch_seq, batch_track, batch_y in train_loader:
-        batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
-        optimizer.zero_grad()
-        logits = model(batch_seq, batch_track)
-        loss = criterion(logits, batch_y)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-    print(f"Epoch {epoch+1}: Loss = {total_loss / len(train_loader):.4f}")
+# move data adding and training inside
+if __name__ == "__main__":
 
-print("[STEP 3] Evaluating...")
-model.eval()
-with torch.no_grad():
-    logits = model(X_seq_test.to(device), X_track_test.to(device))
-    preds = torch.argmax(logits, dim=1).cpu().numpy()
+    X_seq, X_track, y = load_and_align_data()
+    le = LabelEncoder()
+    y_encoded = le.fit_transform(y)
 
-print("[RESULT] Accuracy:", np.mean(preds == y_test))
-print(classification_report(y_test, preds, target_names=[str(cls) for cls in le.classes_]))
+    X_seq_train, X_seq_test, X_track_train, X_track_test, y_train, y_test = train_test_split(
+        X_seq, X_track, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
-cm = confusion_matrix(y_test, preds)
-sns.heatmap(cm, annot=True, fmt='d', cmap="Blues")
-plt.title("Unified Fusion Model Confusion Matrix")
-plt.savefig(f"{SEQ_RESULT_DIR}/unified_confusion_matrix.png")
-plt.close()
+    X_seq_train = torch.tensor(X_seq_train, dtype=torch.float32)
+    X_seq_test = torch.tensor(X_seq_test, dtype=torch.float32)
+    X_track_train = torch.tensor(X_track_train, dtype=torch.float32)
+    X_track_test = torch.tensor(X_track_test, dtype=torch.float32)
+    y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+    y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 
-torch.save(model.state_dict(), MODEL_SAVE_PATH)
-print("Model saved to", MODEL_SAVE_PATH)
+    train_dataset = TensorDataset(X_seq_train, X_track_train, y_train_tensor)
+    test_dataset = TensorDataset(X_seq_test, X_track_test, y_test_tensor)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+    model = UnifiedFusionModel().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.CrossEntropyLoss()
+
+    print("[STEP 2] Training unified fusion model...")
+    for epoch in range(50):
+        model.train()
+        total_loss = 0
+        for batch_seq, batch_track, batch_y in train_loader:
+            batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
+            optimizer.zero_grad()
+            logits = model(batch_seq, batch_track)
+            loss = criterion(logits, batch_y)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        print(f"Epoch {epoch+1}: Loss = {total_loss / len(train_loader):.4f}")
+
+    print("[STEP 3] Evaluating...")
+    model.eval()
+    with torch.no_grad():
+        logits = model(X_seq_test.to(device), X_track_test.to(device))
+        preds = torch.argmax(logits, dim=1).cpu().numpy()
+
+    print("[RESULT] Accuracy:", np.mean(preds == y_test))
+    print(classification_report(y_test, preds, target_names=[str(cls) for cls in le.classes_]))
+
+    cm = confusion_matrix(y_test, preds)
+    sns.heatmap(cm, annot=True, fmt='d', cmap="Blues")
+    plt.title("Unified Fusion Model Confusion Matrix")
+    plt.savefig(f"{SEQ_RESULT_DIR}/unified_confusion_matrix.png")
+    plt.close()
+
+    torch.save(model.state_dict(), MODEL_SAVE_PATH)
+    print("Model saved to", MODEL_SAVE_PATH)

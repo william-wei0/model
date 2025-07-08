@@ -60,7 +60,7 @@ shap_tensor = shap_values[0]  # shape = (N, T, F, C)
 print("SHAP tensor shape:", shap_tensor.shape)
 
 N, T, F, C = shap_tensor.shape
-
+# 100, 20, 9 , 3
 
 
 if F != len(features):
