@@ -30,7 +30,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # === 加载数据并对齐 ===
 def load_and_align_data():
-    print("[STEP 1] Loading and aligning data...")
     seq_data = np.load(SEQ_DATA_PATH, allow_pickle=True)
     track_data = np.load(TRACK_DATA_PATH, allow_pickle=True)
 
@@ -83,7 +82,7 @@ class UnifiedFusionModel(nn.Module):
 
 # move data adding and training inside
 if __name__ == "__main__":
-
+    print("[STEP 1] Loading and aligning data...")
     X_seq, X_track, y = load_and_align_data()
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)

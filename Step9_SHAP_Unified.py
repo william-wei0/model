@@ -31,7 +31,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("[STEP 1] Loading model and data...")
 
 model = UnifiedFusionModel().to(device)
-model.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
+model.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device, weights_only=True))
 model.eval()
 
 X_seq, X_track, y = load_and_align_data()
