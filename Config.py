@@ -22,6 +22,8 @@ SEQ_RESULT_DIR = f"{RESULTS_DIR}/{SEQ_LEN}"
 os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
 FUSION_RESULT_DIR = f"{RESULTS_DIR}/Fusion_{SEQ_LEN}"
 os.makedirs(FUSION_RESULT_DIR, exist_ok=True)
+UNI_RESULT_DIR = f"{RESULTS_DIR}/Unified_{SEQ_LEN}"
+os.makedirs(UNI_RESULT_DIR, exist_ok=True)
 # ======= FEATURES =======
 
 features = [ # Time-based Features 
