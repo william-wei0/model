@@ -20,10 +20,11 @@ import pandas as pd
 # === 设备设置 ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # === 加载数据并对齐 ===
-def load_and_align_data(seq_path, track_path):
-    
-    seq_data = np.load(seq_path, allow_pickle=True)
-    track_data = np.load(track_path, allow_pickle=True)
+
+def load_and_align_data():
+    seq_data = np.load(SEQ_DATA_PATH, allow_pickle=True)
+    track_data = np.load(TRACK_DATA_PATH, allow_pickle=True)
+
 
     X_seq, y_seq, track_ids_seq = seq_data['X'], seq_data['y'], seq_data['track_ids']
     X_track, y_track, track_ids_track = track_data['X'], track_data['y'], track_data['track_ids']
@@ -77,6 +78,7 @@ class UnifiedFusionModel(nn.Module):
 def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path):
     print("[STEP 1] Loading and aligning data...")
     X_seq, X_track, y = load_and_align_data(seq_path, track_path)
+
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
