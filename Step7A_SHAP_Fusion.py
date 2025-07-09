@@ -14,8 +14,8 @@ import seaborn as sns
 import shap
 import pandas as pd
 from Config import *
-from Step2_trackmodel import TrackNet
-from Step3_spotmodel import BiLSTMAttnModel
+from Step2A_trackmodel import TrackNet
+from Step3A_spotmodel import BiLSTMAttnModel
 
 # === Config ===
 SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"

@@ -6,7 +6,7 @@ import seaborn as sns
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')  
-from Step3_spotmodel import BiLSTMAttnModel
+from Step3A_spotmodel import BiLSTMAttnModel
 from Config import *  
 # === Step 1: Load Data ===
 data = np.load(f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz")

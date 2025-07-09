@@ -17,22 +17,13 @@ import matplotlib.pyplot as plt
 import shap
 import pandas as pd
 
-from Config import *
-
-# === 路径配置 ===
-SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
-TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
-MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
-os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
-
 # === 设备设置 ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 # === 加载数据并对齐 ===
-def load_and_align_data():
+def load_and_align_data(seq_path, track_path):
     print("[STEP 1] Loading and aligning data...")
-    seq_data = np.load(SEQ_DATA_PATH, allow_pickle=True)
-    track_data = np.load(TRACK_DATA_PATH, allow_pickle=True)
+    seq_data = np.load(seq_path, allow_pickle=True)
+    track_data = np.load(track_path, allow_pickle=True)
 
     X_seq, y_seq, track_ids_seq = seq_data['X'], seq_data['y'], seq_data['track_ids']
     X_track, y_track, track_ids_track = track_data['X'], track_data['y'], track_data['track_ids']
@@ -82,9 +73,9 @@ class UnifiedFusionModel(nn.Module):
 
 
 # move data adding and training inside
-if __name__ == "__main__":
 
-    X_seq, X_track, y = load_and_align_data()
+def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path):
+    X_seq, X_track, y = load_and_align_data(seq_path, track_path)
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
@@ -132,8 +123,17 @@ if __name__ == "__main__":
     cm = confusion_matrix(y_test, preds)
     sns.heatmap(cm, annot=True, fmt='d', cmap="Blues")
     plt.title("Unified Fusion Model Confusion Matrix")
-    plt.savefig(f"{SEQ_RESULT_DIR}/unified_confusion_matrix.png")
+    plt.savefig(result_path + "/confusion_matrix.png")
     plt.close()
 
-    torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print("Model saved to", MODEL_SAVE_PATH)
+    torch.save(model.state_dict(), model_save_path)
+    print("Model saved to", model_save_path)
+
+if  __name__ == "__main__":
+    from Config import GENERATED_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR
+    SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
+    TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
+    MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
+    os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
+    
+    Train_UnifiedFusionModel(SEQ_DATA_PATH, TRACK_DATA_PATH, MODEL_SAVE_PATH, SEQ_RESULT_DIR)
