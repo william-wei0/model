@@ -36,7 +36,7 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
     print("[STEP 1] Loading model and data...")
 
     model = UnifiedFusionModel().to(device)
-    model.load_state_dict(torch.load(model_save_path, map_location=device))
+    model.load_state_dict(torch.load(model_save_path, map_location=device,weights_only=True))
     model.eval()
 
     X_seq, X_track, y = load_and_align_data(seq_path, track_path)
