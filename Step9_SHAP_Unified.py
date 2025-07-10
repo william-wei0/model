@@ -16,6 +16,7 @@ import pandas as pd
 
 from Step8_unified_fusion import UnifiedFusionModel, load_and_align_data
 torch.backends.cudnn.enabled = False
+
 # === routes configuration ===
 
 def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,result_path,seq_path,track_path):
@@ -30,7 +31,7 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
     # === load data and model  ===
     print("[STEP 1] Loading model and data...")
 
-    model = UnifiedFusionModel().to(device)
+    model = UnifiedFusionModel(seq_input_size=feature_length, track_input_size=track_feature_length, hidden_size=64, dropout=0.0).to(device)
     model.load_state_dict(torch.load(model_save_path, map_location=device,weights_only=True))
     model.eval()
 
@@ -58,14 +59,15 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
         def __init__(self, model):
             super().__init__()
             self.model = model
+            self.seq_length = seq_length
+            self.feature_length = feature_length
 
         def forward(self, x_concat):
             # x_concat: (100, 192) 192 = 9*T + 12
             batch_size = x_concat.shape[0]
             x_seq_flat = x_concat[:, :total_seq]  # T=20, F=9
             x_track = x_concat[:, total_seq:]
-            
-            x_seq = x_seq_flat.view(batch_size, seq_length, 9)
+            x_seq = x_seq_flat.view(batch_size, self.seq_length, self.feature_length)
             return self.model(x_seq, x_track)
     # define shap
     print("[STEP 2] SHAP analysis...")
@@ -104,6 +106,7 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
     plt.tight_layout()
     plt.savefig(f"{result_path}/unified_shap_bar.png")
     print("SHAP feature importance saved.")
+    plt.close()
 
 
     print("[STEP 4] SHAP summary plot (beeswarm)...")
@@ -128,6 +131,7 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
     plt.tight_layout()
     plt.savefig(f"{result_path}/unified_shap_summary.png")
     print("SHAP summary plot saved.")
+    plt.close()
 
 if __name__ == "__main__":
     from Config import UNI_RESULT_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR, features, track_features, GENERATED_DIR

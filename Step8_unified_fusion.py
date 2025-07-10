@@ -1,6 +1,3 @@
-# Step8_unified_fusion.py
-# === 统一融合模型（LSTM + MLP）实现 ===
-
 import os
 import numpy as np
 import torch
@@ -8,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report, confusion_matrix, f1_score, roc_auc_score
+from sklearn.preprocessing import LabelEncoder, label_binarize
 import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
@@ -17,9 +14,9 @@ import matplotlib.pyplot as plt
 import shap
 import pandas as pd
 
-# === 设备设置 ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# === 加载数据并对齐 ===
+
+
 def load_and_align_data(seq_path, track_path):
     seq_data = np.load(seq_path, allow_pickle=True)
     track_data = np.load(track_path, allow_pickle=True)
@@ -49,31 +46,43 @@ def load_and_align_data(seq_path, track_path):
     return np.array(X_seq_matched), np.array(X_track_matched), np.array(y_matched)
 
 
-
-
-# === 模型定义 ===
 class UnifiedFusionModel(nn.Module):
-    def __init__(self):
+    def __init__(self, seq_input_size, track_input_size, hidden_size=64, dropout=0.0):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=9, hidden_size=64, batch_first=True, bidirectional=True)
-        self.track_fc = nn.Sequential(
-            nn.Linear(12, 64), nn.ReLU(), nn.Dropout(0.0)
-        )
+        self.track_input_size = track_input_size
+
+        self.lstm = nn.LSTM(input_size=seq_input_size, hidden_size=hidden_size,
+                            batch_first=True, bidirectional=True)
+
+        if track_input_size > 0:
+            self.track_fc = nn.Sequential(
+                nn.Linear(track_input_size, hidden_size),
+                nn.ReLU(),
+                nn.Dropout(dropout)
+            )
+            self.use_track = True
+        else:
+            self.use_track = False
+
         self.fusion_fc = nn.Sequential(
-            nn.Linear(192, 64), nn.ReLU(), nn.Linear(64, 3)
+            nn.Linear(hidden_size * (2 + int(self.use_track)), 64),
+            nn.ReLU(),
+            nn.Linear(64, 3)
         )
 
     def forward(self, x_seq, x_track):
         lstm_out, _ = self.lstm(x_seq)
         lstm_feat = lstm_out[:, -1, :]
-        track_feat = self.track_fc(x_track)
-        fused = torch.cat([lstm_feat, track_feat], dim=1)
+        if self.use_track:
+            track_feat = self.track_fc(x_track)
+            fused = torch.cat([lstm_feat, track_feat], dim=1)
+        else:
+            fused = lstm_feat
         return self.fusion_fc(fused)
 
 
-# move data adding and training inside
-
-def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path):
+def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
+                             seq_input_size=9, track_input_size=12, hidden_size=64, dropout=0.0):
     print("[STEP 1] Loading and aligning data...")
     X_seq, X_track, y = load_and_align_data(seq_path, track_path)
     le = LabelEncoder()
@@ -93,7 +102,8 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path)
     test_dataset = TensorDataset(X_seq_test, X_track_test, y_test_tensor)
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
-    model = UnifiedFusionModel().to(device)
+    model = UnifiedFusionModel(seq_input_size=seq_input_size, track_input_size=track_input_size,
+                               hidden_size=hidden_size, dropout=dropout).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.CrossEntropyLoss()
 
@@ -109,31 +119,49 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-        print(f"Epoch {epoch+1}: Loss = {total_loss / len(train_loader):.4f}")
+        print(f"Epoch {epoch + 1}: Loss = {total_loss / len(train_loader):.4f}")
 
     print("[STEP 3] Evaluating...")
     model.eval()
     with torch.no_grad():
         logits = model(X_seq_test.to(device), X_track_test.to(device))
-        preds = torch.argmax(logits, dim=1).cpu().numpy()
+        probs = F.softmax(logits, dim=1).cpu().numpy()
+        preds = np.argmax(probs, axis=1)
 
-    print("[RESULT] Accuracy:", np.mean(preds == y_test))
+    acc = np.mean(preds == y_test)
+    f1 = f1_score(y_test, preds, average="macro")
+
+    y_test_bin = label_binarize(y_test, classes=np.unique(y_test))
+    try:
+        auc = roc_auc_score(y_test_bin, probs, average="macro", multi_class="ovo")
+    except:
+        auc = -1  # handle case when AUC cannot be computed
+
+    print("[RESULT] Accuracy:", acc)
     print(classification_report(y_test, preds, target_names=[str(cls) for cls in le.classes_]))
 
     cm = confusion_matrix(y_test, preds)
     sns.heatmap(cm, annot=True, fmt='d', cmap="Blues")
     plt.title("Unified Fusion Model Confusion Matrix")
-    plt.savefig(result_path + "/confusion_matrix.png")
+    os.makedirs(result_path, exist_ok=True)
+    plt.savefig(os.path.join(result_path, "confusion_matrix.png"))
     plt.close()
 
     torch.save(model.state_dict(), model_save_path)
     print("Model saved to", model_save_path)
 
-if  __name__ == "__main__":
+    return {
+        "accuracy": acc,
+        "f1_score": f1,
+        "auc": auc,
+        "confusion_matrix": cm.tolist()
+    }
+
+
+if __name__ == "__main__":
     from Config import GENERATED_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR
     SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
     TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
     MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
     os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
-    
     Train_UnifiedFusionModel(SEQ_DATA_PATH, TRACK_DATA_PATH, MODEL_SAVE_PATH, SEQ_RESULT_DIR)
