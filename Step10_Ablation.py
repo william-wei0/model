@@ -54,9 +54,9 @@ for name, cfg in ablation_configs.items():
     result_path = os.path.join(RESULTS_DIR, prefix)
     os.makedirs(result_path, exist_ok=True)
 
-    # 路径定位
+    # dataset route
     seq_path = os.path.join(GENERATED_DIR, f"{output_prefix}_{SEQ_LEN}.npz")
-    track_path = os.path.join(GENERATED_DIR, "track_dataset.npz")
+    track_path = os.path.join(GENERATED_DIR, f"{output_prefix}track_dataset.npz")
 
     # Step1: 创建数据集（含多 SEQ_LEN）
     Create_Dataset(

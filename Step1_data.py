@@ -149,7 +149,7 @@ def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_pref
 
     # === Step 6: Save Track-Level Dataset ===
 
-    def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix="track_dataset"):
+    def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix=""):
         if len(track_features) == 0:
             print("[INFO] Skipping track-level dataset generation because no track features are provided.")
             return
@@ -181,14 +181,14 @@ def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_pref
                 records.append(record)
 
         df_final = pd.DataFrame(records)
-        df_final.to_csv(f"{GENERATED_DIR}/{output_prefix}.csv", index=False)
-        np.savez(f"{GENERATED_DIR}/{output_prefix}.npz", 
+        df_final.to_csv(f"{GENERATED_DIR}/{output_prefix}track_dataset.csv", index=False)
+        np.savez(f"{GENERATED_DIR}/{output_prefix}track_dataset.npz", 
                 X=df_final[track_features].values, 
                 y=df_final["LABEL"].values,
                 track_ids=df_final[["PREFIX", "TRACK_ID"]].values)
-        print(f"Saved: {GENERATED_DIR}/{output_prefix}.csv & .npz")
+        print(f"Saved: {GENERATED_DIR}/{output_prefix}track_dataset.csv & .npz")
 
-    build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix="track_dataset")
+    build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix=output_prefix)
 
     # === Step 7: Save Multiple Sequence Lengths ===
     for seq_len_iter in default_seq_len:
