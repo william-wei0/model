@@ -4,6 +4,29 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from Config import DATA_DIR, GENERATED_DIR, features, track_features,SEQ_LEN
 def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_prefix,default_seq_len=[SEQ_LEN]):
+    def save_unscaled_spot_features(spots_df, output_prefix="unscaled_spot_features"):
+        # 提取原始（未标准化）spot特征并保存
+        unscaled_df = spots_df[["PREFIX", "TRACK_ID", "FRAME", "LABEL"] + features].copy()
+        out_path = os.path.join(GENERATED_DIR, f"{output_prefix}.csv")
+        unscaled_df.to_csv(out_path, index=False)
+        print(f"[INFO] Saved unscaled spot features to: {out_path}")
+
+    def save_unscaled_track_features(tracks_df, output_prefix="unscaled_track_features"):
+        # 添加 label
+        def match_label(prefix):
+            if prefix.startswith("2nd_"):
+                prefix_base = prefix.replace("2nd_", "").split("_")[0]
+                return second_labels.get(prefix_base, np.nan)
+            else:
+                prefix_base = prefix.split("_")[0]
+                return cart_labels.get(prefix_base, np.nan)
+
+        tracks_df["LABEL"] = tracks_df["PREFIX"].apply(match_label)
+        unscaled_df = tracks_df[["PREFIX", "TRACK_ID", "LABEL"] + track_features].copy()
+        out_path = os.path.join(GENERATED_DIR, f"{output_prefix}.csv")
+        unscaled_df.to_csv(out_path, index=False)
+        print(f"[INFO] Saved unscaled track features to: {out_path}")
+
     # === Step 1: Load Annotations ===
     def load_annotations(path, is_second_batch=False):
         if is_second_batch:
@@ -149,7 +172,7 @@ def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_pref
 
     # === Step 6: Save Track-Level Dataset ===
 
-    def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix=""):
+    def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix="track_dataset"):
         if len(track_features) == 0:
             print("[INFO] Skipping track-level dataset generation because no track features are provided.")
             return
@@ -181,18 +204,20 @@ def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_pref
                 records.append(record)
 
         df_final = pd.DataFrame(records)
-        df_final.to_csv(f"{GENERATED_DIR}/{output_prefix}track_dataset.csv", index=False)
-        np.savez(f"{GENERATED_DIR}/{output_prefix}track_dataset.npz", 
+        df_final.to_csv(f"{GENERATED_DIR}/{output_prefix}.csv", index=False)
+        np.savez(f"{GENERATED_DIR}/{output_prefix}.npz", 
                 X=df_final[track_features].values, 
                 y=df_final["LABEL"].values,
                 track_ids=df_final[["PREFIX", "TRACK_ID"]].values)
-        print(f"Saved: {GENERATED_DIR}/{output_prefix}track_dataset.csv & .npz")
+        print(f"Saved: {GENERATED_DIR}/{output_prefix}.csv & .npz")
 
-    build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix=output_prefix)
+    build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix="track_dataset")
 
     # === Step 7: Save Multiple Sequence Lengths ===
     for seq_len_iter in default_seq_len:
         align_and_save_dataset(spots_df, features, seq_len=seq_len_iter, output_prefix=output_prefix)
+    save_unscaled_spot_features(spots_df)
+    save_unscaled_track_features(tracks_df)
 
 # === Step 8: main ===
 if __name__ == "__main__":
