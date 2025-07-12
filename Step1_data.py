@@ -2,7 +2,33 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from Config import DATA_DIR, GENERATED_DIR, features, track_features
+from Config import DATA_DIR, GENERATED_DIR, features, track_features,SEQ_LEN
+# def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_prefix,default_seq_len=[SEQ_LEN]):
+
+def save_unscaled_spot_features(spots_df, output_prefix="unscaled_spot_features"):
+    # 提取原始（未标准化）spot特征并保存
+    unscaled_df = spots_df[["PREFIX", "TRACK_ID", "FRAME", "LABEL"] + features].copy()
+    out_path = os.path.join(GENERATED_DIR, f"{output_prefix}.csv")
+    unscaled_df.to_csv(out_path, index=False)
+    print(f"[INFO] Saved unscaled spot features to: {out_path}")
+
+def save_unscaled_track_features(tracks_df, output_prefix="unscaled_track_features"):
+    # 添加 label
+    def match_label(prefix):
+        if prefix.startswith("2nd_"):
+            prefix_base = prefix.replace("2nd_", "").split("_")[0]
+            return second_labels.get(prefix_base, np.nan)
+        else:
+            prefix_base = prefix.split("_")[0]
+            return cart_labels.get(prefix_base, np.nan)
+
+    tracks_df["LABEL"] = tracks_df["PREFIX"].apply(match_label)
+    unscaled_df = tracks_df[["PREFIX", "TRACK_ID", "LABEL"] + track_features].copy()
+    out_path = os.path.join(GENERATED_DIR, f"{output_prefix}.csv")
+    unscaled_df.to_csv(out_path, index=False)
+    print(f"[INFO] Saved unscaled track features to: {out_path}")
+
+
 
 
 # === Step 1: Load Annotations ===
@@ -224,6 +250,9 @@ if __name__ == "__main__":
                                features, seq_len=seq_len_iter,
                                output_prefix="trajectory_dataset")
     
-    build_track_level_dataset(tracks_df, cart_labels, second_labels)    
+    build_track_level_dataset(tracks_df, cart_labels, second_labels)   
+     
+    save_unscaled_spot_features(spots_df)
+    save_unscaled_track_features(tracks_df)
     
     print("Dataset creation completed.")
