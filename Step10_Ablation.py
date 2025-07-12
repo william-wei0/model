@@ -2,12 +2,14 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from Config import DATA_DIR, GENERATED_DIR, MODEL_DIR, RESULTS_DIR, SEQ_LEN
-from Step1_data import Create_Dataset
+from Config import DATA_DIR, MODEL_DIR, RESULTS_DIR, SEQ_LEN, GENERATED_DIR
+from Step1_data import (load_annotations,load_tracks_and_spots,
+                        filter_valid_trajectories, compute_features,
+                        align_and_save_dataset, build_track_level_dataset)
 from Step8_unified_fusion import Train_UnifiedFusionModel
 from Step9_SHAP_Unified import SHAP_UnifiedFusionModel
 
-# === 定义特征配置 ===
+# === features and Config ===
 all_features = [  # time-based
     'RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY',
     'ELLIPSE_MAJOR', 'ELLIPSE_MINOR', 'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED'
@@ -40,35 +42,47 @@ ablation_configs = {
     }
 }
 
-# === 结果记录列表 ===
+
 results_summary = []
 
-# === 开始实验 ===
+# === begin experiment ===
 for name, cfg in ablation_configs.items():
     print(f"\n===== Running Ablation: {name} =====")
 
-    # 路径设置
+    # model and dataset save route
     prefix = f"ablation_{name}"
-    output_prefix = prefix
+    seq_path = os.path.join(GENERATED_DIR, f"{prefix}_{SEQ_LEN}.npz")
+    track_path = os.path.join(GENERATED_DIR, f"{prefix}track_dataset.npz")
+    
     model_path = os.path.join(MODEL_DIR, f"{prefix}.pth")
     result_path = os.path.join(RESULTS_DIR, prefix)
     os.makedirs(result_path, exist_ok=True)
 
-    # dataset route
-    seq_path = os.path.join(GENERATED_DIR, f"{output_prefix}_{SEQ_LEN}.npz")
-    track_path = os.path.join(GENERATED_DIR, f"{output_prefix}track_dataset.npz")
-
-    # Step1: 创建数据集（含多 SEQ_LEN）
-    Create_Dataset(
-        DATA_DIR,
-        GENERATED_DIR,
-        cfg["features"],
-        cfg["track_features"],
-        output_prefix=output_prefix,
-        default_seq_len=[SEQ_LEN]
+    # step 1: create dataset
+    cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx",
+                                   is_second_batch=False)
+    second_labels = load_annotations(f"{DATA_DIR}/2nd batch annotations.xlsx",
+                                     is_second_batch=True)
+    
+    spots_df, tracks_df = load_tracks_and_spots(
+        folder=f"{DATA_DIR}/TRACK",
+        cart_labels=cart_labels,
+        second_labels=second_labels
     )
+    
+    spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
+    spots_df = compute_features(spots_df)
 
-    # Step2: 训练模型（返回准确率等）
+    align_and_save_dataset(spots_df,
+                            cfg["features"], seq_len=SEQ_LEN,
+                            output_prefix=prefix)
+    
+    build_track_level_dataset(tracks_df, cart_labels, second_labels,
+                              prefix, cfg["track_features"])    
+
+
+
+    # Step2: training model
     seq_input_size = len(cfg["features"])
     track_input_size = len(cfg["track_features"])
 
@@ -83,7 +97,7 @@ for name, cfg in ablation_configs.items():
         dropout=0.0
     )
 
-    # Step3: SHAP 分析
+    # Step3: shap analysis
     SHAP_UnifiedFusionModel(
         seq_length=SEQ_LEN,
         features=cfg["features"],
@@ -94,7 +108,7 @@ for name, cfg in ablation_configs.items():
         track_path=track_path
     )
 
-    # Step4: 记录结果
+    # Step4: record result
     results_summary.append({
         "config_name": name,
         "accuracy": metrics["accuracy"],
@@ -102,18 +116,18 @@ for name, cfg in ablation_configs.items():
         "auc": metrics["auc"]
     })
 
-# === 输出对比表格 ===
+# === show and save comparison sheet ===
 df = pd.DataFrame(results_summary)
 df = df.sort_values(by="accuracy", ascending=False)
 print("\n=== Summary of Ablation Results ===")
 print(df)
 
-# === 保存CSV ===
 summary_path = os.path.join(RESULTS_DIR, f"ablation_summary_{SEQ_LEN}.csv")
 df.to_csv(summary_path, index=False)
 print(f"Saved summary to {summary_path}")
 
-# === 可选：绘图可视化 ===
+
+# === save plot ===
 plt.figure(figsize=(10, 5))
 df.plot(x='config_name', y=['accuracy', 'f1_score', 'auc'], kind='bar')
 plt.title(f"Ablation Performance Comparison (SeqLen={SEQ_LEN})")

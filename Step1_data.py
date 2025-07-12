@@ -157,7 +157,9 @@ def align_and_save_dataset(spots_df, features, seq_len=20,
 
 
 # === Step 6: Save Track-Level Dataset ===
-def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_prefix1=""):
+def build_track_level_dataset(tracks_df, cart_labels, second_labels,
+                              output_prefix1="", 
+                              track_features = track_features):
     if len(track_features) == 0:
         print("[INFO] No track features available.")
         return
@@ -202,7 +204,7 @@ def build_track_level_dataset(tracks_df, cart_labels, second_labels, output_pref
     
 
 if __name__ == "__main__":
-    
+
     cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx",
                                    is_second_batch=False)
     second_labels = load_annotations(f"{DATA_DIR}/2nd batch annotations.xlsx",
