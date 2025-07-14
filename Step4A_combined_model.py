@@ -10,11 +10,13 @@ from sklearn.preprocessing import LabelEncoder
 from Step3A_spotmodel import BiLSTMAttnModel
 from Step2A_trackmodel import TrackNet
 from Config import *
+
 # === Config ===
 SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
 TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu") # GPU RAM too small
 
 # === Load Data ===
 def load_data():
@@ -50,11 +52,15 @@ def predict_with_models(X_seq, X_track, track_ids_seq, track_ids_track, track_la
     print("Loading models...")
 
     model_seq = BiLSTMAttnModel(input_dim=X_seq.shape[2], hidden_dim=64, output_dim=3, dropout=0.3).to(device)
-    model_seq.load_state_dict(torch.load(f"{MODEL_DIR}/model_best_20.pth", map_location=device))
+    model_seq.load_state_dict(torch.load(f"{MODEL_DIR}/model_best_{SEQ_LEN}.pth",
+                                         map_location=device, 
+                                         weights_only=True))
     model_seq.eval()
 
     model_track = TrackNet(input_dim=X_track.shape[1], num_classes=3).to(device)
-    model_track.load_state_dict(torch.load(f"{MODEL_DIR}/track_model.pth", map_location=device))
+    model_track.load_state_dict(torch.load(f"{MODEL_DIR}/track_model.pth",
+                                           map_location=device, 
+                                           weights_only=True))
     model_track.eval()
 
     print("Generating predictions...")
@@ -130,7 +136,7 @@ def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
     print("Confusion Matrix:\n", cm)
 
     if save_result:
-        # 权重扫描图
+        # fusion weight sweep
         plt.figure()
         plt.plot(weights, acc_list, marker='o')
         plt.xlabel("Fusion Weight (BiLSTM)")
@@ -140,7 +146,7 @@ def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
         plt.savefig(f"{FUSION_RESULT_DIR}/fusion_weight_sweep.png")
         plt.close()
 
-        # 混淆矩阵图
+        # confusion matrix
         plt.figure(figsize=(6, 5))
         classes = np.unique(y_true)
         sns.heatmap(cm, annot=True, fmt='d', cmap='Greens',
@@ -152,7 +158,7 @@ def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
         plt.savefig(f"{FUSION_RESULT_DIR}/fusion_confusion_matrix.png")
         plt.close()
 
-        # 模型准确率对比柱状图
+        # model accuracy compare
         acc_fusion = best_acc
         plt.figure(figsize=(6, 4))
         plt.bar(["BiLSTM", "TrackNet", "Fusion"], [acc_seq, acc_track, acc_fusion],
@@ -163,7 +169,7 @@ def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
         plt.savefig(f"{FUSION_RESULT_DIR}/model_accuracy_comparison.png")
         plt.close()
 
-        # 每类准确率图
+        # accuracy in each class
         print("Per-Class Accuracy:")
         categories = np.unique(y_true)
         class_accs = []
@@ -182,7 +188,7 @@ def train_and_evaluate_fusion(pred_seq, pred_track, y_true, save_result=True):
         plt.savefig(f"{FUSION_RESULT_DIR}/per_class_accuracy.png")
         plt.close()
 
-        # 保存预测结果
+        # save predict results
         np.savez(f"{FUSION_RESULT_DIR}/fusion_results.npz", y_true=y_true, y_pred=best_pred)
     print("[DEBUG] acc_seq =", acc_seq)
     print("[DEBUG] acc_track =", acc_track)
