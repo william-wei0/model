@@ -28,17 +28,23 @@ ablation_configs = {
         "features": all_features,
         "track_features": all_track_features
     },
-    "remove_negative": {
-        "features": all_features,
-        "track_features": [
-            f for f in all_track_features if f not in [
-                "TRACK_MEAN_SPEED", "TRACK_STD_SPEED", "MEAN_STRAIGHT_LINE_SPEED"
-            ]
-        ]
-    },
-    "top6_shap": {
-        "features": ["RADIUS", "SOLIDITY", "ELLIPSE_MINOR"],
-        "track_features": ["TRACK_DURATION", "TRACK_STD_SPEED", "TRACK_MEAN_SPEED"]
+    # "remove_negative": {
+    #     "features": all_features,
+    #     "track_features": [
+    #         f for f in all_track_features if f not in [
+    #             "TRACK_MEAN_SPEED", "TRACK_STD_SPEED", "MEAN_STRAIGHT_LINE_SPEED"
+    #         ]
+    #     ]
+    # },
+    # "top6_shap": {
+    #     "features": ["RADIUS", "SOLIDITY", "ELLIPSE_MINOR"],
+    #     "track_features": ["TRACK_DURATION", "TRACK_STD_SPEED", "TRACK_MEAN_SPEED"]
+    # }
+    "Specify" : {
+        "features": ['RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY', 
+                     'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED'],
+        "track_features" :["TRACK_DISPLACEMENT", "TOTAL_DISTANCE_TRAVELED",
+                            "MEAN_DIRECTIONAL_CHANGE_RATE"]
     }
 }
 
