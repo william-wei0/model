@@ -5,6 +5,10 @@ matplotlib.use('Agg')  # Use non-interactive backend for environments without GU
 import matplotlib.pyplot as plt
 from Config import GENERATED_DIR, features, track_features
 
+save_dir = os.path.join(GENERATED_DIR, "feature_distribution")
+os.makedirs(save_dir, exist_ok=True)
+
+
 def plot_feature_distribution_by_label(feature_name):
     """
     Plot the mean and standard deviation of a given feature grouped by label.
@@ -27,29 +31,33 @@ def plot_feature_distribution_by_label(feature_name):
         raise ValueError(f"'{feature_name}' or 'LABEL' not found in dataframe.")
 
     # Compute mean and standard deviation for each label
-    stats = df.groupby("LABEL")[feature_name].agg(['mean', 'std']).reset_index()
-
+    stats = df.groupby("LABEL")[feature_name].agg(['mean', 'std', 'count']).reset_index()
+    stats['sem'] = stats['std'] / stats['count']**0.5
+    
     # Create bar plot with error bars
     plt.figure(figsize=(10, 6))
-    plt.bar(stats["LABEL"], stats["mean"], yerr=stats["std"], width=0.5,capsize=8, alpha=0.7, color='skyblue')
+    plt.bar(stats["LABEL"], stats["mean"], yerr=stats["sem"],
+            width=0.5, capsize=8, alpha=0.7, color='skyblue')
     plt.xlabel("Label")
     plt.ylabel(f"{feature_name} Mean Value")
-    plt.title(f"{feature_name} Mean ± Std by Label")
+    plt.title(f"{feature_name} Mean ± SEM by Label")
     plt.xticks(stats["LABEL"])
 
     # Annotate each bar with its value
     for i, row in stats.iterrows():
-        plt.text(row["LABEL"], row["mean"] + row["std"] * 0.05, f'{row["mean"]:.2f}', 
+        plt.text(row["LABEL"], row["mean"] + row["sem"] * 0.05, f'{row["mean"]:.2f}', 
                  ha='center', va='bottom', fontsize=10)
 
     plt.tight_layout()
 
     # Save plot to file
-    out_path = os.path.join(GENERATED_DIR, f"feature_{feature_name}_distribution.png")
+    out_path = os.path.join(save_dir, f"feature_{feature_name}_distribution.png")
     plt.savefig(out_path)
     plt.close()
     print(f"Saved plot to {out_path}")
 
 # Example usage
 if __name__ == "__main__":
-    plot_feature_distribution_by_label("TRACK_MIN_SPEED")
+    for feature in features + track_features:
+        plot_feature_distribution_by_label(feature)
+    
