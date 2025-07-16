@@ -142,30 +142,28 @@ def align_and_save_dataset(spots_df, features, seq_len=20,
     X_list, y_list, track_id_list = [], [], []
     rows = []
 
-    for prefix, group_df in spots_df.groupby("PREFIX"):
-        # features_except_dir = [f for f in features if f != "DIRECTION"]
-        scaler = StandardScaler()
-        # scaler.fit(group_df[features_except_dir])
-        scaler.fit(group_df[features])
-        for (p, tid), traj in group_df.groupby(["PREFIX", "TRACK_ID"]):
-            feat = traj[features].values
-            if len(feat) >= seq_len:
-                feat = feat[:seq_len]
-            else:
-                pad = np.zeros((seq_len - len(feat), len(features)))
-                feat = np.vstack([feat, pad])
+    # === 新增整体 scaler ===
+    scaler = StandardScaler()
+    scaler.fit(spots_df[features])  # 使用所有数据进行 fit
 
-            feat_scaled = feat.copy()
-            df_temp = pd.DataFrame(feat, columns=features)
-            feat_scaled = scaler.transform(df_temp)
+    for (prefix, tid), traj in spots_df.groupby(["PREFIX", "TRACK_ID"]):
+        feat = traj[features].values
+        if len(feat) >= seq_len:
+            feat = feat[:seq_len]
+        else:
+            pad = np.zeros((seq_len - len(feat), len(features)))
+            feat = np.vstack([feat, pad])
 
-            X_list.append(feat_scaled)
-            y_list.append(traj["LABEL"].iloc[0])
-            track_id_list.append((p, tid))
+        df_temp = pd.DataFrame(feat, columns=features)
+        feat_scaled = scaler.transform(df_temp)
 
-            for t in range(seq_len):
-                row = [f"{p}_{tid}", t] + list(feat_scaled[t])
-                rows.append(row)
+        X_list.append(feat_scaled)
+        y_list.append(traj["LABEL"].iloc[0])
+        track_id_list.append((prefix, tid))
+
+        for t in range(seq_len):
+            row = [f"{prefix}_{tid}", t] + list(feat_scaled[t])
+            rows.append(row)
 
     X = np.array(X_list)
     y = np.array(y_list)
@@ -182,6 +180,7 @@ def align_and_save_dataset(spots_df, features, seq_len=20,
     )
 
 
+
 # === Step 6: Save Track-Level Dataset ===
 def build_track_level_dataset(tracks_df, cart_labels, second_labels,
                               output_prefix1="", 
@@ -189,6 +188,7 @@ def build_track_level_dataset(tracks_df, cart_labels, second_labels,
     if len(track_features) == 0:
         print("[INFO] No track features available.")
         return
+
     def match_label(prefix):
         if prefix.startswith("2nd_"):
             prefix_base = prefix.replace("2nd_", "").split("_")[0]
@@ -201,33 +201,20 @@ def build_track_level_dataset(tracks_df, cart_labels, second_labels,
     df = tracks_df.dropna(subset=track_features +
                           ["LABEL", "PREFIX", "TRACK_ID"]).copy()
 
-    records = []
-    for prefix, group in df.groupby("PREFIX"):
-        scaler = StandardScaler()
-        group_feat = group[track_features].values
-        group_scaled = scaler.fit_transform(group_feat)
+    # === 整体标准化 ===
+    scaler = StandardScaler()
+    df[track_features] = scaler.fit_transform(df[track_features])
 
-        for i, row in enumerate(group.itertuples()):
-            record = {
-                "PREFIX": prefix,
-                "TRACK_ID": row.TRACK_ID,
-                "LABEL": row.LABEL
-            }
-            for j, f in enumerate(track_features):
-                record[f] = group_scaled[i][j]
-            records.append(record)
-
-    df_final = pd.DataFrame(records)
+    df_final = df[["PREFIX", "TRACK_ID", "LABEL"] + track_features]
     df_final.to_csv(f"{GENERATED_DIR}/{output_prefix1}track_dataset.csv",
                     index=False)
-    
+
     np.savez(f"{GENERATED_DIR}/{output_prefix1}track_dataset.npz", 
-            X=df_final[track_features].values, 
-            y=df_final["LABEL"].values,
-            track_ids=df_final[["PREFIX", "TRACK_ID"]].values)
+             X=df_final[track_features].values, 
+             y=df_final["LABEL"].values,
+             track_ids=df_final[["PREFIX", "TRACK_ID"]].values)
     print(f"Saved: {GENERATED_DIR}/{output_prefix1}track_dataset.csv & .npz")
 
-    
 
 if __name__ == "__main__":
 

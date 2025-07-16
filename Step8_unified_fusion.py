@@ -80,6 +80,7 @@ class UnifiedFusionModel(nn.Module):
             fused = lstm_feat
         return self.fusion_fc(fused)
 
+from sklearn.utils.class_weight import compute_class_weight
 
 def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
                              seq_input_size=9, track_input_size=12, hidden_size=64, dropout=0.0):
@@ -87,6 +88,9 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     X_seq, X_track, y = load_and_align_data(seq_path, track_path)
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
+
+    class_weights_np = compute_class_weight(class_weight='balanced', classes=np.unique(y_encoded), y=y_encoded)
+    class_weights = torch.tensor(class_weights_np, dtype=torch.float32).to(device)
 
     X_seq_train, X_seq_test, X_track_train, X_track_test, y_train, y_test = train_test_split(
         X_seq, X_track, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
@@ -105,7 +109,8 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     model = UnifiedFusionModel(seq_input_size=seq_input_size, track_input_size=track_input_size,
                                hidden_size=hidden_size, dropout=dropout).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    criterion = nn.CrossEntropyLoss()
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     print("[STEP 2] Training unified fusion model...")
     for epoch in range(50):
@@ -135,7 +140,7 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     try:
         auc = roc_auc_score(y_test_bin, probs, average="macro", multi_class="ovo")
     except:
-        auc = -1  # handle case when AUC cannot be computed
+        auc = -1
 
     print("[RESULT] Accuracy:", acc)
     print(classification_report(y_test, preds, target_names=[str(cls) for cls in le.classes_]))
@@ -157,7 +162,45 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
         "confusion_matrix": cm.tolist()
     }
 
+def Test_UnifiedFusionModel(seq_path, track_path, model_save_path):
+    print("[STEP 1] Loading and aligning data...")
+    X_seq, X_track, y = load_and_align_data(seq_path, track_path)
+    le = LabelEncoder()
+    y_encoded = le.fit_transform(y)
 
+    X_seq_tensor = torch.tensor(X_seq, dtype=torch.float32)
+    X_track_tensor = torch.tensor(X_track, dtype=torch.float32)
+
+    model = UnifiedFusionModel(seq_input_size=X_seq.shape[2], track_input_size=X_track.shape[1]).to(device)
+    model.load_state_dict(torch.load(model_save_path, map_location=device))
+    model.eval()
+
+    with torch.no_grad():
+        logits = model(X_seq_tensor.to(device), X_track_tensor.to(device))
+        probs = F.softmax(logits, dim=1).cpu().numpy()
+        preds = np.argmax(probs, axis=1)
+
+    acc = np.mean(preds == y_encoded)
+    f1 = f1_score(y_encoded, preds, average="macro")
+    
+    y_encoded_bin = label_binarize(y_encoded, classes=np.unique(y_encoded))
+    auc = roc_auc_score(y_encoded_bin, probs, average="macro", multi_class="ovo")
+    print("[RESULT] Accuracy:", acc)
+    print(classification_report(y_encoded, preds, target_names=[str(cls) for cls in le.classes_]))
+    cm = confusion_matrix(y_encoded, preds)
+    plt.figure(figsize=(10, 7))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=le.classes_, yticklabels=le.classes_)
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title("Confusion Matrix")
+    plt.show()
+    print("[RESULT] AUC:", auc)
+    return {
+        "accuracy": acc,
+        "f1_score": f1,
+        "auc": auc,
+        "confusion_matrix": cm.tolist()
+    }
 if __name__ == "__main__":
     from Config import GENERATED_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR
     SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
@@ -165,3 +208,10 @@ if __name__ == "__main__":
     MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
     os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
     Train_UnifiedFusionModel(SEQ_DATA_PATH, TRACK_DATA_PATH, MODEL_SAVE_PATH, SEQ_RESULT_DIR)
+if __name__ == "__main__":
+    from Config import UNI_RESULT_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR, features, track_features, GENERATED_DIR
+    SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
+    TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
+    MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
+    os.makedirs(UNI_RESULT_DIR, exist_ok=True)
+    Test_UnifiedFusionModel(SEQ_DATA_PATH, TRACK_DATA_PATH, MODEL_SAVE_PATH)

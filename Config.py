@@ -1,7 +1,7 @@
 
 import os
 # ======= RUNNING SETTINGS =======
-SEQ_LEN = 360 # Choose from 20, 100, 360
+SEQ_LEN = 20 # Choose from 20, 100, 360
 
 # ======= PATH =======
 
