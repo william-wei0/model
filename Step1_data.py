@@ -56,18 +56,18 @@ def load_tracks_and_spots(folder, cart_labels, second_labels):
     for file_name in os.listdir(folder):
         if not file_name.endswith("_tracks.csv"):
             continue
-
-        prefix = file_name.replace("_tracks.csv", "")
-        spot_file = file_name.replace("_tracks.csv", "_spots.csv")
+        
+        prefix = file_name.replace("_tracks.csv", "") # NCI2_XY1
+        spot_file = file_name.replace("_tracks.csv", "_spots.csv") # NCI2_XY1_spots.csv
 
         track_path = os.path.join(folder, file_name)
         spot_path = os.path.join(folder, spot_file)
 
         if prefix.startswith("2nd_"):
-            prefix_base = prefix.replace("2nd_", "").split("_")[0]
+            prefix_base = prefix.replace("2nd_", "").split("_")[0] 
             label_dict = second_labels
         else:
-            prefix_base = prefix.split("_")[0]
+            prefix_base = prefix.split("_")[0] # NCI2
             label_dict = cart_labels
 
         if prefix_base not in label_dict:
@@ -77,7 +77,7 @@ def load_tracks_and_spots(folder, cart_labels, second_labels):
         try:
             df_raw_track = pd.read_csv(track_path, encoding='latin1',
                                        header=None)
-            names_track = df_raw_track.iloc[0].tolist()
+            names_track = df_raw_track.iloc[0].tolist() # header
             df_track = pd.read_csv(track_path, encoding='latin1',
                                    skiprows=4, names=names_track)
             df_track['PREFIX'] = prefix
@@ -105,7 +105,7 @@ def load_tracks_and_spots(folder, cart_labels, second_labels):
 # === Step 3: Filter Valid Trajectories ===
 def filter_valid_trajectories(spots_df, tracks_df, min_frames=10):
     valid_ids = tracks_df[tracks_df["NUMBER_SPOTS"] >= min_frames
-                          ][["PREFIX", "TRACK_ID"]]
+                          ][["PREFIX", "TRACK_ID"]] # prefix and track id saved
     spots_df_filtered = spots_df.merge(valid_ids, 
                                        on=["PREFIX", "TRACK_ID"], how="inner")
     tracks_df_filtered = tracks_df[tracks_df["NUMBER_SPOTS"] >= min_frames]
@@ -122,9 +122,7 @@ def compute_features(spots_df):
     
     spots_df["SPEED"] = np.sqrt(spots_df["VELOCITY_X"]**2
                                 + spots_df["VELOCITY_Y"]**2)
-    spots_df["DIRECTION"] = np.arctan2(spots_df["VELOCITY_Y"],
-                                       spots_df["VELOCITY_X"]) / np.pi
-
+    
     drop_cols = [col for col in spots_df.columns 
                  if "INTENSITY" in col or col in ["POSITION_X", "POSITION_Y"]]
     spots_df.drop(columns=drop_cols, inplace=True, errors='ignore')
@@ -216,6 +214,21 @@ def build_track_level_dataset(tracks_df, cart_labels, second_labels,
     print(f"Saved: {GENERATED_DIR}/{output_prefix1}track_dataset.csv & .npz")
 
 
+def filter_outlier(csv_file = "unscaled_spot_features.csv"):
+    """
+    Delete large and invalid numbers in ellipse related columns in spot file
+    """
+    df = pd.read_csv(os.path.join(GENERATED_DIR, csv_file))
+    init_rows = len(df)
+
+    df_valid = df[(df['ELLIPSE_MINOR'] != 0) & (df['ELLIPSE_ASPECTRATIO'] > 0)
+                  & (df['ELLIPSE_ASPECTRATIO'] <= 5)]
+    count = init_rows - len(df_valid)
+    print(f"From {init_rows}, there are {count} of rows not valid. ")
+    df_valid.to_csv(os.path.join(GENERATED_DIR, csv_file), index=False)
+    print("They have been deleted.")
+
+
 if __name__ == "__main__":
 
     cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx",
@@ -232,14 +245,16 @@ if __name__ == "__main__":
     spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
     spots_df = compute_features(spots_df)
     
-    for seq_len_iter in [20,100,360]:
-        align_and_save_dataset(spots_df,
-                               features, seq_len=seq_len_iter,
-                               output_prefix="trajectory_dataset")
+    # for seq_len_iter in [20,100,360]:
+    #     align_and_save_dataset(spots_df,
+    #                            features, seq_len=seq_len_iter,
+    #                            output_prefix="trajectory_dataset")
     
-    build_track_level_dataset(tracks_df, cart_labels, second_labels)   
-     
+    # build_track_level_dataset(tracks_df, cart_labels, second_labels)   
+    
+
     save_unscaled_spot_features(spots_df)
     save_unscaled_track_features(tracks_df)
     
+    filter_outlier()
     print("Dataset creation completed.")
