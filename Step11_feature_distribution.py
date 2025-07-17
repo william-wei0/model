@@ -4,6 +4,8 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for environments without GUI
 import matplotlib.pyplot as plt
 from Config import GENERATED_DIR, features, track_features
+import numpy as np
+import scipy.stats as stats
 
 save_dir = os.path.join(GENERATED_DIR, "feature_distribution")
 os.makedirs(save_dir, exist_ok=True)
@@ -56,8 +58,44 @@ def plot_feature_distribution_by_label(feature_name):
     plt.close()
     print(f"Saved plot to {out_path}")
 
+
+
+# two sample mean z-test, save as Excel file
+def z_test_pairwise(features_list):
+    # current only spot
+    csv_file = "unscaled_spot_features.csv"
+    df = pd.read_csv(os.path.join(GENERATED_DIR, csv_file))
+    # groups = [0.0, 0.5, 1.0]
+    pairs = [(0.0, 0.5), (0.5, 1.0), (0.0, 1.0)]
+    results = []
+    for feature in features_list:
+        row = {"feature": feature}
+        for g1, g2 in pairs:
+            d1 = df[df["LABEL"] == g1][feature].dropna()
+            d2 = df[df["LABEL"] == g2][feature].dropna()
+            n1, n2 = len(d1), len(d2)
+            if n1 < 2 or n2 < 2:
+                p = np.nan
+            else:
+                mean1, mean2 = d1.mean(), d2.mean()
+                std1, std2 = d1.std(ddof=1), d2.std(ddof=1)
+                denom = np.sqrt(std1**2/n1 + std2**2/n2)
+                if denom == 0:
+                    p = np.nan
+                else:
+                    z = (mean1 - mean2) / denom
+                    p = 2 * stats.norm.sf(abs(z))
+            row[f"p_{g1}_vs_{g2}"] = p
+        results.append(row)
+    df_out = pd.DataFrame(results)
+    out_path = os.path.join(save_dir, "feature_pairwise_ztest_pvalues.xlsx")
+    df_out.to_excel(out_path, index=False)
+    print(f"Saved z-test p-values to {out_path}")
+
+    
 # Example usage
 if __name__ == "__main__":
     for feature in features + track_features:
         plot_feature_distribution_by_label(feature)
     
+    z_test_pairwise(features)
