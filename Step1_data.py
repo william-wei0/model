@@ -2,8 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from Config import DATA_DIR, GENERATED_DIR, features, track_features,SEQ_LEN
-# def Create_Dataset(DATA_DIR, GENERATED_DIR, features, track_features,output_prefix,default_seq_len=[SEQ_LEN]):
+from Config import DATA_DIR, GENERATED_DIR, features, track_features
 
 def save_unscaled_spot_features(spots_df, output_prefix="unscaled_spot_features"):
     # 提取原始（未标准化）spot特征并保存
@@ -245,12 +244,12 @@ if __name__ == "__main__":
     spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
     spots_df = compute_features(spots_df)
     
-    # for seq_len_iter in [20,100,360]:
-    #     align_and_save_dataset(spots_df,
-    #                            features, seq_len=seq_len_iter,
-    #                            output_prefix="trajectory_dataset")
+    for seq_len_iter in [20,100,360]:
+        align_and_save_dataset(spots_df,
+                               features, seq_len=seq_len_iter,
+                               output_prefix="trajectory_dataset")
     
-    # build_track_level_dataset(tracks_df, cart_labels, second_labels)   
+    build_track_level_dataset(tracks_df, cart_labels, second_labels)   
     
 
     save_unscaled_spot_features(spots_df)
