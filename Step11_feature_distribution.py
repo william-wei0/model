@@ -11,7 +11,7 @@ save_dir = os.path.join(GENERATED_DIR, "feature_distribution")
 os.makedirs(save_dir, exist_ok=True)
 
 
-def plot_feature_distribution_by_label(feature_name):
+def plot_feature_distribution_by_label(feature_name, sem_table):
     """
     Plot the mean and standard deviation of a given feature grouped by label.
 
@@ -35,6 +35,13 @@ def plot_feature_distribution_by_label(feature_name):
     # Compute mean and standard deviation for each label
     stats = df.groupby("LABEL")[feature_name].agg(['mean', 'std', 'count']).reset_index()
     stats['sem'] = stats['std'] / stats['count']**0.5
+    
+    for i, row in stats.iterrows():
+        sem_table.append({
+            "feature": feature_name,
+            "label": row["LABEL"],
+            "sem": row["sem"]
+        })
     
     # Create bar plot with error bars
     plt.figure(figsize=(10, 6))
@@ -85,7 +92,12 @@ def z_test_pairwise(features_list):
                 else:
                     z = (mean1 - mean2) / denom
                     p = 2 * stats.norm.sf(abs(z))
-            row[f"p_{g1}_vs_{g2}"] = p
+            # 4 digits
+            if pd.isna(p):
+                p_str = ''
+            else:
+                p_str = f"{p:.4e}"
+            row[f"p_{g1}_vs_{g2}"] = p_str
         results.append(row)
     df_out = pd.DataFrame(results)
     out_path = os.path.join(save_dir, "feature_pairwise_ztest_pvalues.xlsx")
@@ -95,7 +107,13 @@ def z_test_pairwise(features_list):
     
 # Example usage
 if __name__ == "__main__":
+    sem_table = []
     for feature in features + track_features:
-        plot_feature_distribution_by_label(feature)
+        plot_feature_distribution_by_label(feature, sem_table)
+    # save SEM table
+    sem_df = pd.DataFrame(sem_table)
+    sem_out_path = os.path.join(save_dir, "feature_SEM_table.xlsx")
+    sem_df.to_excel(sem_out_path, index=False)
+    print(f"Saved SEM table to {sem_out_path}")
     
     z_test_pairwise(features)
