@@ -1,8 +1,10 @@
 
 import os
 # ======= RUNNING SETTINGS =======
-SEQ_LEN = 20 # Choose from 20, 100, 360
-
+SEQ_LEN = 100 # Choose from 20, 100, 360
+HIDDEN_SIZE_LSTM = 128
+DROPOUT = 0.3
+EPOCHS = 400
 # ======= PATH =======
 
 # Upload this folder with original data files
