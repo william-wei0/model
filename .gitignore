@@ -1,6 +1,7 @@
-Data/
+
 Model/
 Results/
 __pycache__/
 transformer_trackModel.py
 Generated/
+storageCode.py

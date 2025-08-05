@@ -20,20 +20,21 @@ torch.backends.cudnn.enabled = False
 
 # === routes configuration ===
 
-def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,result_path,seq_path,track_path):
+def SHAP_UnifiedFusionModel(seq_length, features, track_features, model_save_path, result_path, seq_path, track_path):
     """
     Perform SHAP analysis on the unified fusion model.
     """
-    feature_length = len(features)  # e.g. 9
+    feature_length = len(features)              # e.g. 9
     track_feature_length = len(track_features)  # e.g. 12
-    total_seq = seq_length * feature_length  # e.g. 180 = 20 * 9
+    total_seq = seq_length * feature_length     # e.g. 180 = 20 * 9
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # === load data and model  ===
     print("[STEP 1] Loading model and data...")
 
-    model = UnifiedFusionModel(seq_input_size=feature_length, track_input_size=track_feature_length, hidden_size=HIDDEN_SIZE_LSTM, dropout=DROPOUT).to(device)
-    model.load_state_dict(torch.load(model_save_path, map_location=device,weights_only=True))
+    model = UnifiedFusionModel(seq_input_size=feature_length, track_input_size=track_feature_length,
+                               hidden_size=HIDDEN_SIZE_LSTM, dropout=DROPOUT).to(device)
+    model.load_state_dict(torch.load(model_save_path, map_location=device, weights_only=True))
     model.eval()
 
     X_seq, X_track, y = load_and_align_data(seq_path, track_path)
@@ -44,17 +45,17 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
         X_seq, X_track, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
 
     X_seq_train = torch.tensor(X_seq_train, dtype=torch.float32)
-    X_seq_test = torch.tensor(X_seq_test, dtype=torch.float32)
+    X_seq_test  = torch.tensor(X_seq_test,  dtype=torch.float32)
     X_track_train = torch.tensor(X_track_train, dtype=torch.float32)
-    X_track_test = torch.tensor(X_track_test, dtype=torch.float32)
-
+    X_track_test  = torch.tensor(X_track_test,  dtype=torch.float32)
 
     # combine (X_seq, X_track) to one tensor
-    X_seq_flat = X_seq_test.reshape(X_seq_test.shape[0], -1)  # (N, 20*9)
+    X_seq_flat    = X_seq_test.reshape(X_seq_test.shape[0], -1)  # (N, T*F)
     X_test_concat = torch.cat([X_seq_flat, X_track_test], dim=1).to(device)
 
     X_train_seq_flat = X_seq_train.reshape(X_seq_train.shape[0], -1)
-    X_train_concat = torch.cat([X_train_seq_flat, X_track_train], dim=1).to(device)
+    X_train_concat   = torch.cat([X_train_seq_flat, X_track_train], dim=1).to(device)
+
     # define wrapped model
     class WrappedUnifiedModel(nn.Module):
         def __init__(self, model):
@@ -64,60 +65,123 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
             self.feature_length = feature_length
 
         def forward(self, x_concat):
-            # x_concat: (100, 192) 192 = 9*T + 12
+            # x_concat: (N, total_seq + track_feature_length)
             batch_size = x_concat.shape[0]
-            x_seq_flat = x_concat[:, :total_seq]  # T=20, F=9
-            x_track = x_concat[:, total_seq:]
+            x_seq_flat = x_concat[:, :total_seq]
+            x_track   = x_concat[:, total_seq:]
             x_seq = x_seq_flat.view(batch_size, self.seq_length, self.feature_length)
             return self.model(x_seq, x_track)
-    # define shap
+
+    # === SHAP ===
     print("[STEP 2] SHAP analysis...")
     wrapped_model = WrappedUnifiedModel(model).to(device)
     explainer = shap.GradientExplainer(wrapped_model, X_train_concat[:100])
     shap_values = explainer.shap_values(X_test_concat[:100], ranked_outputs=1)
 
     print("[STEP 3] SHAP drawing...")
-    # open (100, total_seq+12, 1) 
-    # get shap value from package 
+    # shap_values_combined: (100, total_seq + track_feature_length, 1)
     shap_values_combined = shap_values[0]
 
-    shap_value_seq = shap_values_combined[:, :total_seq]
+    shap_value_seq   = shap_values_combined[:, :total_seq]
     shap_value_track = shap_values_combined[:, total_seq:]
 
-    shap_value_seq = shap_value_seq.reshape(100, seq_length, feature_length)
+    shap_value_seq = shap_value_seq.reshape(100, seq_length, feature_length)  # (N, T, F)
 
-    shap_result_seq = shap_value_seq.mean(axis=(0,1))
-    shap_result_track = shap_value_track.mean(axis=(0,2))
+    # ---- Signed mean importance (original) ----
+    shap_result_seq_signed   = shap_value_seq.mean(axis=(0, 1))   # (F,)
+    shap_result_track_signed = shap_value_track.mean(axis=(0, 2)) # (track_F,)
+    shap_result_signed = np.concatenate((shap_result_seq_signed, shap_result_track_signed))
 
-    feature_names = features + track_features
+    # ---- Absolute mean importance (NEW) ----
+    shap_result_seq_abs   = np.abs(shap_value_seq).mean(axis=(0, 1))   # (F,)
+    shap_result_track_abs = np.abs(shap_value_track).mean(axis=(0, 2)) # (track_F,)
+    shap_result_abs = np.concatenate((shap_result_seq_abs, shap_result_track_abs))
 
-    shap_result = np.concatenate((shap_result_seq, shap_result_track)) 
+    # Base feature names (sequence-level features collapsed over time + track features)
+    base_feature_names = features + track_features
 
-
-    shap_df = pd.DataFrame({
-        "Feature": feature_names,
-        "Importance": shap_result
+    # DataFrames
+    shap_df_signed = pd.DataFrame({
+        "Feature": base_feature_names,
+        "Importance": shap_result_signed
     }).sort_values("Importance", ascending=False)
 
+    shap_df_abs = pd.DataFrame({
+        "Feature": base_feature_names,
+        "Importance": shap_result_abs
+    }).sort_values("Importance", ascending=False)
 
+    print("[INFO] Top (signed) SHAP features:")
+    print(shap_df_signed.head(10))
+    print("[INFO] Top (absolute) SHAP features:")
+    print(shap_df_abs.head(10))
 
+    # ---- Plot signed importance (unchanged file name) ----
     plt.figure(figsize=(12, 6))
-    sns.barplot(data=shap_df.head(30), x="Importance", y="Feature")
-    plt.title("Unified fusion SHAP Feature Importances")
+    sns.barplot(data=shap_df_signed.head(30), x="Importance", y="Feature")
+    plt.title("Unified Fusion SHAP Feature Importances (Signed)")
     plt.tight_layout()
     plt.savefig(f"{result_path}/unified_shap_bar.png")
-    print("SHAP feature importance saved.")
+    print("SHAP signed feature importance saved to unified_shap_bar.png.")
+    plt.close()
+
+    # ---- Plot absolute importance (NEW) ----
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=shap_df_abs.head(30), x="Importance", y="Feature")
+    plt.title("Unified Fusion SHAP Feature Importances (Absolute)")
+    plt.tight_layout()
+    plt.savefig(f"{result_path}/unified_shap_bar_absolute.png")
+    print("SHAP absolute feature importance saved to unified_shap_bar_absolute.png.")
+    plt.close()
+
+    # === For signed SHAP (keep direction) ===
+    # Average over samples, sum over time steps
+    shap_result_seq_signed = shap_value_seq.mean(axis=0).sum(axis=0)  # (features,)
+
+    # Track features: average over samples (no time dimension)
+    shap_result_track_signed = shap_value_track.mean(axis=0).mean(axis=1)  # (track_features,)
+
+    # === For absolute SHAP (magnitude) ===
+    # Take abs first, average over samples, then sum over time
+    shap_result_seq_abs = np.abs(shap_value_seq).mean(axis=0).sum(axis=0)  # (features,)
+    shap_result_track_abs = np.abs(shap_value_track).mean(axis=0).mean(axis=1)  # (track_features,)
+
+    # Combine
+    shap_result_signed = np.concatenate((shap_result_seq_signed, shap_result_track_signed))
+    shap_result_abs = np.concatenate((shap_result_seq_abs, shap_result_track_abs))
+
+    # Feature names
+    feature_names_base = features + track_features
+
+    # Create DataFrames
+    shap_df_signed = pd.DataFrame({"Feature": feature_names_base, "Importance": shap_result_signed}).sort_values("Importance", ascending=False)
+    shap_df_abs = pd.DataFrame({"Feature": feature_names_base, "Importance": shap_result_abs}).sort_values("Importance", ascending=False)
+
+    # === Plot signed ===
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=shap_df_signed.head(30), x="Importance", y="Feature")
+    plt.title("Unified Fusion SHAP Feature Importances (Signed, Time-Summed)")
+    plt.tight_layout()
+    plt.savefig(f"{result_path}/unified_shap_bar_signed_timesum.png")
+    plt.close()
+
+    # === Plot absolute ===
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=shap_df_abs.head(30), x="Importance", y="Feature")
+    plt.title("Unified Fusion SHAP Feature Importances (Absolute, Time-Summed)")
+    plt.tight_layout()
+    plt.savefig(f"{result_path}/unified_shap_bar_absolute_timesum.png")
     plt.close()
 
 
     print("[STEP 4] SHAP summary plot (beeswarm)...")
 
-    # 处理 shap_values 为 2D numpy
-    shap_values_2d = shap_values_combined.squeeze(-1)  # shape: (100, 192)
+    # Convert to 2D numpy (N, total_seq + track_feature_length)
+    shap_values_2d = shap_values_combined.squeeze(-1)
 
-    # 构造 feature names
+    # Expanded per-time-step names for summary plot
     seq_feature_names = [f"{feat}_t{t}" for t in range(seq_length) for feat in features]
-    feature_names = seq_feature_names + track_features  # length = 192
+    feature_names_expanded = seq_feature_names + track_features  # length = total_seq + track_feature_length
 
     X_test_concat_cpu = X_test_concat[:100].cpu().detach().numpy()
 
@@ -125,20 +189,21 @@ def SHAP_UnifiedFusionModel(seq_length, features,track_features,model_save_path,
     shap.summary_plot(
         shap_values_2d,
         X_test_concat_cpu,
-        feature_names=feature_names,
+        feature_names=feature_names_expanded,
         plot_type="dot",
         show=False
     )
     plt.tight_layout()
     plt.savefig(f"{result_path}/unified_shap_summary.png")
-    print("SHAP summary plot saved.")
+    print("SHAP summary plot saved to unified_shap_summary.png.")
     plt.close()
 
 if __name__ == "__main__":
     from Config import UNI_RESULT_DIR, SEQ_LEN, MODEL_DIR, SEQ_RESULT_DIR, features, track_features, GENERATED_DIR
-     # e.g. 180 = 20 * 9
+    # e.g. 180 = 20 * 9
     SEQ_DATA_PATH = f"{GENERATED_DIR}/trajectory_dataset_{SEQ_LEN}.npz"
     TRACK_DATA_PATH = f"{GENERATED_DIR}/track_dataset.npz"
     MODEL_SAVE_PATH = f"{MODEL_DIR}/unified_fusion_model.pth"
     os.makedirs(SEQ_RESULT_DIR, exist_ok=True)
-    SHAP_UnifiedFusionModel(SEQ_LEN, features, track_features, MODEL_SAVE_PATH, result_path=UNI_RESULT_DIR, seq_path=SEQ_DATA_PATH, track_path=TRACK_DATA_PATH) 
+    SHAP_UnifiedFusionModel(SEQ_LEN, features, track_features, MODEL_SAVE_PATH,
+                            result_path=UNI_RESULT_DIR, seq_path=SEQ_DATA_PATH, track_path=TRACK_DATA_PATH)

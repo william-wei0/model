@@ -12,7 +12,7 @@ from Step9_SHAP_Unified import SHAP_UnifiedFusionModel
 # === features and Config ===
 all_features = [  # time-based
     'RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY',
-    'ELLIPSE_MAJOR', 'ELLIPSE_MINOR', 'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED'
+    'ELLIPSE_MAJOR', 'ELLIPSE_MINOR', 'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED', 'MEAN_SQUARE_DISPLACEMENT'
 ]
 
 all_track_features = [  # track-based
@@ -24,10 +24,10 @@ all_track_features = [  # track-based
 ]
 
 ablation_configs = {
-    "baseline": {
-        "features": all_features,
-        "track_features": all_track_features
-    },
+    # "baseline": {
+    #     "features": all_features,
+    #     "track_features": all_track_features
+    # },
     # "remove_negative": {
     #     "features": all_features,
     #     "track_features": [
@@ -41,11 +41,12 @@ ablation_configs = {
     #     "track_features": ["TRACK_DURATION", "TRACK_STD_SPEED", "TRACK_MEAN_SPEED"]
     # }
     "Specify" : {
-        "features": ['RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY', 
-                     'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED'],
-        "track_features" :["TRACK_DISPLACEMENT", "TOTAL_DISTANCE_TRAVELED",
+        "features": ['AREA', 'PERIMETER', 'CIRCULARITY', 
+                     'ELLIPSE_ASPECTRATIO', 'SOLIDITY', 'SPEED', 'MEAN_SQUARE_DISPLACEMENT'],
+        "track_features" :["TRACK_STD_SPEED", "TRACK_DISPLACEMENT",
                             "MEAN_DIRECTIONAL_CHANGE_RATE"]
-    }
+    },
+
 }
 
 
@@ -59,33 +60,38 @@ for name, cfg in ablation_configs.items():
     prefix = f"ablation_{name}"
     seq_path = os.path.join(GENERATED_DIR, f"{prefix}_{SEQ_LEN}.npz")
     track_path = os.path.join(GENERATED_DIR, f"{prefix}track_dataset.npz")
-    
+
     model_path = os.path.join(MODEL_DIR, f"{prefix}.pth")
     result_path = os.path.join(RESULTS_DIR, prefix)
     os.makedirs(result_path, exist_ok=True)
 
+    create_new_dataset = False
     # step 1: create dataset
-    cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx",
-                                   is_second_batch=False)
-    second_labels = load_annotations(f"{DATA_DIR}/2nd batch annotations.xlsx",
-                                     is_second_batch=True)
-    
-    spots_df, tracks_df = load_tracks_and_spots(
-        folder=f"{DATA_DIR}/TRACK",
-        cart_labels=cart_labels,
-        second_labels=second_labels
-    )
-    
-    spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
-    spots_df = compute_features(spots_df)
+    if (create_new_dataset):
+        print("Creating New Dataset...")
+        cart_labels = load_annotations(f"{DATA_DIR}/CART annotations.xlsx",
+                                    is_second_batch=False)
+        second_labels = load_annotations(f"{DATA_DIR}/2nd batch annotations.xlsx",
+                                        is_second_batch=True)
+        
+        spots_df, tracks_df = load_tracks_and_spots(
+            folder=f"{DATA_DIR}/TRACK",
+            cart_labels=cart_labels,
+            second_labels=second_labels
+        )
+        
+        spots_df, tracks_df = filter_valid_trajectories(spots_df, tracks_df)
+        spots_df = compute_features(spots_df)
 
-    align_and_save_dataset(spots_df,
-                            cfg["features"], seq_len=SEQ_LEN,
-                            output_prefix=prefix)
-    
-    build_track_level_dataset(tracks_df, cart_labels, second_labels,
-                              prefix, cfg["track_features"])    
-
+        align_and_save_dataset(spots_df,
+                                cfg["features"], seq_len=SEQ_LEN,
+                                output_prefix=prefix)
+        
+        build_track_level_dataset(tracks_df, cart_labels, second_labels,
+                                prefix, cfg["track_features"])    
+        print("Finished Creating New Dataset.")
+    else:
+        print("\nDid not create new dataset.\n")
 
 
     # Step2: training model
@@ -100,8 +106,10 @@ for name, cfg in ablation_configs.items():
         seq_input_size=seq_input_size,
         track_input_size=track_input_size,
         hidden_size=HIDDEN_SIZE_LSTM,
-        dropout=DROPOUT
+        dropout=DROPOUT,
+        test_prefix = prefix
     )
+    
 
     # Step3: shap analysis
     SHAP_UnifiedFusionModel(
