@@ -37,7 +37,7 @@ def SHAP_UnifiedFusionModel(seq_length, features, track_features, model_save_pat
     model.load_state_dict(torch.load(model_save_path, map_location=device, weights_only=True))
     model.eval()
 
-    X_seq, X_track, y = load_and_align_data(seq_path, track_path)
+    X_seq, X_track, y, prefix_tid = load_and_align_data(seq_path, track_path)
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
@@ -116,6 +116,9 @@ def SHAP_UnifiedFusionModel(seq_length, features, track_features, model_save_pat
     print("[INFO] Top (absolute) SHAP features:")
     print(shap_df_abs.head(10))
 
+    shap_df_signed.to_csv(f"{result_path}/Top (signed) SHAP features.csv", index=False)
+    shap_df_abs.to_csv(f"{result_path}/Top (absolute) SHAP features.csv", index=False)
+
     # ---- Plot signed importance (unchanged file name) ----
     plt.figure(figsize=(12, 6))
     sns.barplot(data=shap_df_signed.head(30), x="Importance", y="Feature")
@@ -156,6 +159,8 @@ def SHAP_UnifiedFusionModel(seq_length, features, track_features, model_save_pat
     # Create DataFrames
     shap_df_signed = pd.DataFrame({"Feature": feature_names_base, "Importance": shap_result_signed}).sort_values("Importance", ascending=False)
     shap_df_abs = pd.DataFrame({"Feature": feature_names_base, "Importance": shap_result_abs}).sort_values("Importance", ascending=False)
+    shap_df_signed.to_csv(f"{result_path}/Top (Time-Summed, signed) SHAP features.csv", index=False)
+    shap_df_abs.to_csv(f"{result_path}/Top (Time-Summed, absolute) SHAP features.csv", index=False)
 
     # === Plot signed ===
     plt.figure(figsize=(12, 6))

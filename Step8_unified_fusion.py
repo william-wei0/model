@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, f1_score, roc_auc_score, roc_curve, auc
 from sklearn.preprocessing import LabelEncoder, label_binarize
@@ -29,6 +29,36 @@ UNIFIED_MODEL_PATH = os.path.join(MODEL_DIR, "unified_model_best.pth")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+class WholeSequenceTrackDataset(Dataset):
+    def __init__(self, seq_path, track_path, transform=None):
+        # Load and align data
+        X_seq, X_track, y_matched, prefix_tid = load_and_align_data(seq_path, track_path)
+
+        # Convert to torch tensors
+        self.X_seq = torch.tensor(X_seq, dtype=torch.float32)
+        self.X_track = torch.tensor(X_track, dtype=torch.float32)
+        self.prefix_tid = prefix_tid
+        self.transform = transform  # optional, for augmentation or preprocessing
+
+
+
+    def __len__(self):
+        # Total number of samples
+        return len(self.prefix_tid)
+
+    def __getitem__(self, idx):
+        seq = self.X_seq[idx]
+        track = self.X_track[idx]
+        prefix_tid = self.prefix_tid[idx]
+
+        # Apply optional transform to features
+        if self.transform:
+            seq, track = self.transform((seq, track))
+
+        return seq, track, prefix_tid 
+
+
+
 def load_and_align_data(seq_path, track_path):
     seq_data = np.load(seq_path, allow_pickle=True)
     track_data = np.load(track_path, allow_pickle=True)
@@ -45,7 +75,7 @@ def load_and_align_data(seq_path, track_path):
         for i, tid in enumerate(track_ids_track)
     }
 
-    X_seq_matched, X_track_matched, y_matched = [], [], []
+    X_seq_matched, X_track_matched, y_matched, prefix_tid = [], [], [], []
     for i, tid in enumerate(track_ids_seq):
         key = tuple(tid) if isinstance(tid, (list, tuple, np.ndarray)) else (tid,)
         if key in track_id_to_index:
@@ -53,10 +83,14 @@ def load_and_align_data(seq_path, track_path):
             X_seq_matched.append(X_seq[i])
             X_track_matched.append(X_track[idx])
             y_matched.append(y_seq[i])
+            prefix_tid.append(tid[0]+str(tid[1]))
 
     print(f"[DEBUG] Matched pairs: {len(X_seq_matched)}")
-    return np.array(X_seq_matched), np.array(X_track_matched), np.array(y_matched)
+    return np.array(X_seq_matched), np.array(X_track_matched), np.array(y_matched), prefix_tid
 
+
+def count_params(module):
+    return sum(p.numel() for p in module.parameters())
 
 class UnifiedFusionModel(nn.Module):
     def __init__(self, seq_input_size, track_input_size, hidden_size=128, dropout=0.5):
@@ -68,23 +102,31 @@ class UnifiedFusionModel(nn.Module):
         self.attn = Attention(hidden_size*2, dropout)
         self.norm = nn.LayerNorm(hidden_size*2)
 
+        print("Total Sequence parameters:", count_params(self.lstm) + count_params(self.attn) + count_params(self.norm))
+
         if track_input_size > 0:
             self.track_fc = nn.Sequential(
-                nn.Linear(track_input_size, TRACK_OUTPUT_SIZE),
+                nn.Linear(track_input_size, 266),
                 nn.ReLU(),
                 nn.Dropout(dropout),
+                nn.Linear(266, 266),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(266, TRACK_OUTPUT_SIZE),
+                nn.LayerNorm(TRACK_OUTPUT_SIZE)
             )
 
             # self.track_fc = nn.Sequential(
-            #     nn.Linear(track_input_size, hidden_size),
+            #     nn.Linear(track_input_size, 266),
             #     nn.ReLU(),
-            #     nn.Dropout(dropout),
-            #     nn.Linear(hidden_size, TRACK_OUTPUT_SIZE)
+            #     nn.Linear(266, 266),
+            #     nn.ReLU(),
+            #     nn.Linear(266, TRACK_OUTPUT_SIZE),
+            #     nn.LayerNorm(TRACK_OUTPUT_SIZE),
+            #     #nn.Dropout(0.3),
             # )
 
-            # self.track_fc = nn.Sequential(
-            #     nn.Linear(track_input_size, TRACK_OUTPUT_SIZE),
-            # )
+            print("Total Track parameters:", count_params(self.track_fc))
 
             self.use_track = True
         else:
@@ -97,17 +139,27 @@ class UnifiedFusionModel(nn.Module):
             nn.Linear(FUSION_SIZE, 3)
         )
 
+        # self.fusion_fc = nn.Sequential(
+        #     nn.Linear(hidden_size * 2 + TRACK_OUTPUT_SIZE, FUSION_SIZE),
+        #     nn.ReLU(),
+        #     nn.LayerNorm(FUSION_SIZE),
+        #     nn.Linear(FUSION_SIZE, 3)
+        # )
 
-    def forward(self, x_seq, x_track):
+
+    def forward(self, x_seq, x_track, lstm_weight=0.5):
         lstm_out, _ = self.lstm(x_seq)
-        #lstm_out = self.norm(lstm_out)
+        lstm_out = self.norm(lstm_out)
         lstm_feat, attn_weights = self.attn(lstm_out)
+        #lstm_feat = self.norm(lstm_feat)
         lstm_feat = F.layer_norm(lstm_feat, lstm_feat.shape[1:])
+        lstm_feat = lstm_feat * lstm_weight
         
 
         if self.use_track:
             track_feat = self.track_fc(x_track)
             track_feat = F.layer_norm(track_feat, track_feat.shape[1:])
+            track_feat = track_feat * (1 - lstm_weight)
             fused = torch.cat([lstm_feat, track_feat], dim=1)
         else:
             fused = lstm_feat
@@ -132,12 +184,24 @@ def get_weights(train_loader):
     print("weights:", weights)
     return weights
 
-    
+def evaluate_model(model, dataloader, alpha, device):
+    model.eval()
+    correct, total = 0, 0
+    with torch.no_grad():
+        for batch_seq, batch_track, batch_y in dataloader:
+            batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
+            outputs = model(batch_seq, batch_track, lstm_weight=alpha)
+            preds = outputs.argmax(dim=1)
+            correct += (preds == batch_y).sum().item()
+            total += batch_y.size(0)
+    return correct / total
+
+
 
 def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
                              seq_input_size=9, track_input_size=12, hidden_size=128, dropout=0.5, test_prefix="no_prefix"):
     print("[STEP 1] Loading and aligning data...")
-    X_seq, X_track, y = load_and_align_data(seq_path, track_path)
+    X_seq, X_track, y, prefix_tid = load_and_align_data(seq_path, track_path)
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
@@ -222,22 +286,25 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
             early_stop = 0
         else:
             early_stop += 1
-            if early_stop >= 40:
+            if early_stop >= 60:
                 print("Early stopping triggered.")
                 break
-                
+    
+    results_path = os.path.join(RESULTS_DIR, test_prefix)
 
     model.load_state_dict(best_model)
     torch.save(model.state_dict(), UNIFIED_MODEL_PATH)
+    torch.save(model.state_dict(), f"{results_path}/loss_curve.png")
+    
 
     lstm_weight_norm = sum(p.norm().item() for n, p in model.lstm.named_parameters() if 'weight' in n)
     track_weight_norm = sum(p.norm().item() for n, p in model.track_fc.named_parameters() if 'weight' in n)
     print("LSTM weight norm:", lstm_weight_norm)
     print("Track weight norm:", track_weight_norm)
     
-    results_path = os.path.join(RESULTS_DIR, test_prefix)
+    
     np.savez(f"{results_path}/training_logs_unified.npz", train_losses=train_losses, val_losses=val_losses, val_accuracies=val_accs)
-
+    
     # Plot training curve
     print("[STEP 2] Drawing Loss Graph...")
     plt.plot(train_losses, label="Train Loss")
@@ -257,6 +324,7 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     
 
     print("[STEP 3] Evaluating...")
+
     model.eval()
     with torch.no_grad():
         logits = model(X_seq_test.to(device), X_track_test.to(device))
@@ -293,7 +361,65 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     plt.savefig(os.path.join(result_path, "confusion_matrix.png"))
     plt.close()
 
+    alphas = np.linspace(0, 1, 21)  # 0.0, 0.1, ..., 1.0
+    accuracies = []
 
+    for a in alphas:
+        acc = evaluate_model(model, test_loader, a, device=device)  
+        # update evaluate_model to pass `alpha` instead of seq/track weights
+        accuracies.append(acc)
+        print(f"Alpha={a:.2f} (Seq={a:.2f}, Track={1-a:.2f}), Accuracy={acc:.4f}")
+
+    plt.plot(alphas, accuracies, marker='o')
+    plt.xlabel("LSTM Weighting")
+    plt.ylabel("Accuracy")
+    plt.title("Accuracy vs Sequence/Track Mixing Ratio")
+    plt.grid(True)
+    os.makedirs(result_path, exist_ok=True)
+    plt.savefig(os.path.join(result_path, "Fusion Weights.png"))
+    plt.close()
+
+    wholedataset = WholeSequenceTrackDataset(seq_path, track_path)
+    whole_dataloader = DataLoader(wholedataset, batch_size=BATCH_SIZE, shuffle=True)
+
+    prefix_dict = {}
+
+    for batch_seq, batch_track, batch_prefix_tid in whole_dataloader:
+        batch_seq, batch_track = batch_seq.to(device), batch_track.to(device)
+        logits = model(batch_seq, batch_track)
+        pred = logits.argmax(dim=1)
+
+        for index in range(len(batch_prefix_tid)):
+            case_id = batch_prefix_tid[index].split('_')[0]
+
+            if case_id in prefix_dict:
+                prefix_dict[case_id][pred[index]] += 1
+            else:
+                prefix_dict[case_id] = [0, 0, 0]
+
+
+
+    prefix_dict_df = pd.DataFrame(prefix_dict).transpose()
+
+    #prefix_dict_df.rename(columns={'0': 'Progressive', '1': 'Stable', '2': 'Responsive'}, inplace=True)
+    prefix_dict_df.columns = ['Progressive', 'Stable', 'Responsive']
+    prefix_dict_df = prefix_dict_df.div(prefix_dict_df.sum(axis=1), axis=0)
+    print(prefix_dict_df)
+    prefix_dict_df = prefix_dict_df.sort_values(by=['Progressive'])
+    print(prefix_dict_df)
+
+    prefix_dict_df_plot = prefix_dict_df.plot(
+        kind = 'barh',
+        stacked = True,
+        title = 'T cell Proportions by Case',
+        mark_right = True,
+        color=['#90BFF9', '#FFC080', '#FFA0A0'])
+    
+    for patch in prefix_dict_df_plot.patches:
+        patch.set_edgecolor('black')  # outline color
+        patch.set_linewidth(1)      # outline thickness
+    plt.savefig(os.path.join(result_path, "proportions_by_case.png"))
+    plt.close()
 
     torch.save(model.state_dict(), model_save_path)
     print("Model saved to", model_save_path)
@@ -307,6 +433,8 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
         "val_losses": val_losses,
         "val_accuracy": val_accs 
     }
+
+
 
 def Test_UnifiedFusionModel(seq_path, track_path, model_path, output_dir="Results"):
     print("[TEST] Loading external test dataset...")
