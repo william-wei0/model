@@ -1,0 +1,5 @@
+LABEL,TRACK_ID,SPOT_SOURCE_ID,SPOT_TARGET_ID,LINK_COST,DIRECTIONAL_CHANGE_RATE,SPEED,DISPLACEMENT,EDGE_TIME,EDGE_X_LOCATION,EDGE_Y_LOCATION,EDGE_Z_LOCATION,MANUAL_EDGE_COLOR
+Label,Track ID,Source spot ID,Target spot ID,Edge cost,Directional change rate,Speed,Displacement,Edge time,Edge X,Edge Y,Edge Z,Manual edge color
+Label,Track ID,Source ID,Target ID,Cost,γ rate,Speed,Disp.,Edge T,Edge X,Edge Y,Edge Z,Edge color
+,,,,(cost),(rad/frame),(pixel/frame),(pixel),(frame),(pixel),(pixel),(pixel),
+ID2018 → ID2001,0,2018,2001,84.70971810680562,NaN,9.203788247607918,9.203788247607918,6.5,284.10990740740743,840.467529239766,0.0,
