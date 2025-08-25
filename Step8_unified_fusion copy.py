@@ -335,6 +335,7 @@ def fusion_weight_analysis(model, test_loader, device, result_path):
     for a in alphas:
         acc = evaluate_model(model, test_loader, a, device=device)
         accuracies.append(acc)
+        print(f"Alpha={a:.2f}, Accuracy={acc:.4f}")
     plt.plot(alphas, accuracies, marker='o')
     plt.xlabel("LSTM Weighting")
     plt.ylabel("Accuracy")
@@ -398,22 +399,19 @@ def correlate_with_size_change(df, annotations_path, result_path):
     plt.close()
     return r2
 
-def plot_loss_curve(train_losses, val_losses, test_losses, results_path):
+def plot_loss_curve(train_losses, val_losses, results_path):
     print("[STEP 2] Drawing Loss Graph...")
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
-    plt.plot(test_losses, label="Val Loss")
     plt.legend()
     plt.title("Loss Curve")
     plt.savefig(f"{results_path}/loss_curve.png")
     plt.close()
     print("[STEP 2] Finished Drawing Loss Graph...")
 
-def plot_accuracies(train_accs, val_accs, test_accs, results_path):
+def plot_val_accuracy(val_accs, results_path):
     print("[STEP 2] Drawing Validation Accuracy Graph...")
-    plt.plot(np.array(train_accs) * 100)
     plt.plot(np.array(val_accs) * 100)
-    plt.plot(np.array(test_accs) * 100)
     plt.title("Validation Accuracy (%)")
     plt.savefig(f"{results_path}/val_accuracy.png")
     plt.close()
@@ -423,7 +421,7 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
                              seq_input_size=9, track_input_size=12, hidden_size=128, fusion_size=128, dropout=0.5, test_prefix="no_prefix"):
     
     print("[STEP 1] Loading and aligning data...")
-    test_train_split_annotation_path = r"Change to path to annnotations file"
+    test_train_split_annotation_path = r"C:\Users\billy\Desktop\VIP\Tianzan\Cell-Track-Multi-Model\Data\Annotations.xlsx"
     X_seq_train, X_seq_test, X_track_train, X_track_test, y_train, y_test_original = train_test_split_by_case(seq_path, track_path, test_train_split_annotation_path=test_train_split_annotation_path)
 
     le = LabelEncoder()
@@ -436,28 +434,16 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     if (unknown_labels):
         print("Unknown labels label found in test set but not in train:", unknown_labels)
 
-
-    X_seq_train, X_seq_val, X_track_train, X_track_val, y_train, y_val = train_test_split(
-        X_seq_train, X_track_train, y_train, test_size=0.2, random_state=42, stratify=y_train)
-
     X_seq_train = torch.tensor(X_seq_train, dtype=torch.float32)
-    X_seq_val = torch.tensor(X_seq_val, dtype=torch.float32)
     X_seq_test = torch.tensor(X_seq_test, dtype=torch.float32)
-    
     X_track_train = torch.tensor(X_track_train, dtype=torch.float32)
-    X_track_val = torch.tensor(X_track_val, dtype=torch.float32)
     X_track_test = torch.tensor(X_track_test, dtype=torch.float32)
-
     y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-    y_val_tensor = torch.tensor(y_val, dtype=torch.long)
     y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 
     train_dataset = TensorDataset(X_seq_train, X_track_train, y_train_tensor)
-    val_dataset = TensorDataset(X_seq_val, X_track_val, y_val_tensor)
     test_dataset = TensorDataset(X_seq_test, X_track_test, y_test_tensor)
-
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,num_workers=0, pin_memory=False)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True,num_workers=0, pin_memory=False)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True,num_workers=0, pin_memory=False)
 
     classes, counts = np.unique(y_train, return_counts=True)
@@ -488,17 +474,13 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     entropy_total, entropy_count = 0.0, 0
     lowest_loss = 10000
     best_model = None
-    train_accs, train_losses = [], []
-    val_accs, val_losses = [], []
-    test_losses, test_accs = [], []
+    train_accs, train_losses, val_losses, val_accs = [], [], [], []
 
     scaler = torch.amp.GradScaler("cuda")
 
     for epoch in range(EPOCHS):
         model.train()
         correct_train, total_train, train_loss = 0, 0, 0
-        correct_val, total_val, val_loss = 0, 0, 0
-        correct_test, total_test, test_loss = 0, 0, 0
         for batch_seq, batch_track, batch_y in train_loader:
             batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
             optimizer.zero_grad()
@@ -520,22 +502,13 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
             total_train += batch_y.size(0)
 
         model.eval()
+        correct_val, total_val, val_loss = 0, 0, 0
         with torch.no_grad():
-            for batch_seq, batch_track, batch_y in val_loader:
-                batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
-                logits = model(batch_seq, batch_track)
-                loss = criterion(logits, batch_y)
-                val_loss += loss.item()
-
-                pred = logits.argmax(dim=1)
-                correct_val += (pred == batch_y).sum().item()
-                total_val += batch_y.size(0)
-
             for batch_seq, batch_track, batch_y in test_loader:
                 batch_seq, batch_track, batch_y = batch_seq.to(device), batch_track.to(device), batch_y.to(device)
                 logits = model(batch_seq, batch_track)
                 loss = criterion(logits, batch_y)
-                test_loss += loss.item()
+                val_loss += loss.item()
 
                 # probs = F.softmax(logits, dim=1)
                 # batch_entropy = -torch.sum(probs * torch.log(probs + 1e-8), dim=1)
@@ -545,33 +518,25 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
                 # print(f"[VAL] Epoch {epoch+1} - Avg Prediction Entropy: {avg_entropy:.4f}")
 
                 pred = logits.argmax(dim=1)
-                correct_test += (pred == batch_y).sum().item()
-                total_test += batch_y.size(0)
+                correct_val += (pred == batch_y).sum().item()
+                total_val += batch_y.size(0)
 
-        scheduler.step(val_loss)
+
 
         train_loss = train_loss / len(train_loader)
         train_acc = correct_train / total_train
 
-        val_loss /= len(val_loader)
+        val_loss /= len(test_loader)
         val_acc = correct_val / total_val
-
-        test_loss /= len(test_loader)
-        test_acc = correct_test / total_test
         
-        
-
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        test_losses.append(test_loss)
+        scheduler.step(val_loss)
 
         train_accs.append(train_acc)
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
         val_accs.append(val_acc)
-        test_accs.append(test_acc)
-
         if epoch % 10 == 0:
-            print(f"Epoch {epoch + 1} | Loss = {train_loss:.4f} | Val Loss={val_loss:.4f} | Test Loss={test_loss:.4f}")
-            print(f"Train Acc={train_acc:.4f} | Val Acc={val_acc:.4f} | Test Acc={test_acc:.4f}")
+            print(f"Epoch {epoch + 1} | Loss = {train_loss:.4f} | Val Loss={val_loss:.4f} | Train Acc={train_acc:.4f} | Val Acc={val_acc:.4f}")
             print(scheduler.get_last_lr())
 
         if val_loss < lowest_loss:
@@ -603,12 +568,11 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
     
     np.savez(f"{train_results_path}/training_logs_unified.npz", 
              train_losses=train_losses, train_accs=train_accs,
-             val_losses=val_losses, val_accs=val_accs,
-             test_losses=test_losses, test_accuracies=test_accs)
+             val_losses=val_losses, val_accuracies=val_accs)
     
     # Plot training curve
-    plot_loss_curve(train_losses, val_losses, test_losses, train_results_path)
-    plot_accuracies(train_accs, val_accs, test_accs, train_results_path)
+    plot_loss_curve(train_losses, val_losses, train_results_path)
+    plot_val_accuracy(val_accs, train_results_path)
     
 
     print("[STEP 3] Evaluating...")
@@ -638,38 +602,15 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
 
 
     # -------------------------------------------------
-    # BEST VALIDATION GRAPHS
+    # BEST VALIDATION/TEST GRAPHS
     # -------------------------------------------------
-    val_results_path = os.path.join(result_path, f"val results/hidden_{hidden_size}/fusion_{fusion_size}")
-    os.makedirs(val_results_path, exist_ok=True)
-
-    preds, probs = run_inference(model, X_seq_val, X_track_val, device)
-    best_val_acc, f1, auc_value, y_val_bin = compute_metrics(y_val, preds, probs)
-
-    print(f"[RESULT] Accuracy: {best_val_acc:.4f}, F1: {f1:.4f}, AUC: {auc_value:.4f}")
-    print(classification_report(y_val, preds, target_names=[str(cls) for cls in le.classes_]))
-
-    plot_roc(y_val_bin, probs, val_results_path, n_classes=3)
-    cm = plot_confusion_matrix(y_val, preds, le.classes_, val_results_path)
-
-    # fusion_weight_analysis(model, val_loader, device, val_results_path)
-
-    # df = compute_case_proportions(model, SubsetDataset(seq_path, track_path, test_train_split_annotation_path, 1),
-    #                             device, BATCH_SIZE, val_results_path)
-    # df["Combined Score"] = (df["Progressive"]*0 + df["Stable"]*0.5 + df["Responsive"]*1.0)
-
-    # r2 = correlate_with_size_change(df, test_train_split_annotation_path, val_results_path)
-
-    # -------------------------------------------------
-    # BEST VALIDATION GRAPHS
-    # -------------------------------------------------
-    test_results_path = os.path.join(result_path, f"test results/hidden_{hidden_size}/fusion_{fusion_size}")
+    test_results_path = os.path.join(result_path, f"val results/hidden_{hidden_size}/fusion_{fusion_size}")
     os.makedirs(test_results_path, exist_ok=True)
 
     preds, probs = run_inference(model, X_seq_test, X_track_test, device)
-    best_test_acc, f1, auc_value, y_test_bin = compute_metrics(y_test, preds, probs)
+    best_val_acc, f1, auc_value, y_test_bin = compute_metrics(y_test, preds, probs)
 
-    print(f"[RESULT] Accuracy: {best_test_acc:.4f}, F1: {f1:.4f}, AUC: {auc_value:.4f}")
+    print(f"[RESULT] Accuracy: {best_val_acc:.4f}, F1: {f1:.4f}, AUC: {auc_value:.4f}")
     print(classification_report(y_test, preds, target_names=[str(cls) for cls in le.classes_]))
 
     plot_roc(y_test_bin, probs, test_results_path, n_classes=3)
@@ -692,17 +633,11 @@ def Train_UnifiedFusionModel(seq_path, track_path, model_save_path, result_path,
         "auc": auc_value,
         "confusion_matrix": cm.tolist(),
         "train_losses": train_losses,
-        "val_losses": val_losses,
-        "test_losses": test_losses,
-
         "train_accuracy": train_accs,
-        "val_accuracy": val_accs,
-        "test_accuracy": test_accs,
-
         "best_train_acc": best_train_acc,
-        "best_val_acc":best_val_acc,
-        "best_test_acc": best_test_acc,
-        
+        "val_losses": val_losses,
+        "val_accuracy": val_accs,
+        "best_val_acc": best_val_acc,
         "r2": r2
     }
 

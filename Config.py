@@ -2,12 +2,12 @@
 import os
 # ======= RUNNING SETTINGS =======
 SEQ_LEN = 100 # Choose from 20, 100, 360
-HIDDEN_SIZE_LSTM = 128
+HIDDEN_SIZE_LSTM = 32
 TRACK_OUTPUT_SIZE = HIDDEN_SIZE_LSTM * 2
-FUSION_SIZE = 1024
-DROPOUT = 0.7
+FUSION_SIZE = 32
+DROPOUT = 0.3
 EPOCHS = 400
-BATCH_SIZE = 128
+BATCH_SIZE = 2048
 # ======= PATH =======
 
 # Upload this folder with original data files
@@ -31,10 +31,26 @@ UNI_RESULT_DIR = f"{RESULTS_DIR}/Unified_{SEQ_LEN}"
 os.makedirs(UNI_RESULT_DIR, exist_ok=True)
 # ======= FEATURES =======
 
+# features = [ # Time-based Features 
+#     # Morphological Features
+#     'RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY', # Geometric Properties
+#     'ELLIPSE_MAJOR', 'ELLIPSE_MINOR', 'ELLIPSE_ASPECTRATIO', # Ellipse-fitting-based features
+#     'SOLIDITY',
+#     # Motion Features
+#     'SPEED',  # Calculated 
+#     "MEAN_SQUARE_DISPLACEMENT"
+# ]
+
+# track_features = [ # Track-Level Statistics Features
+#     "TRACK_DISPLACEMENT", "TRACK_STD_SPEED",
+#     "TOTAL_DISTANCE_TRAVELED", "CONFINEMENT_RATIO",
+#     "MEAN_DIRECTIONAL_CHANGE_RATE"
+# ]
+
 features = [ # Time-based Features 
     # Morphological Features
-    'RADIUS', 'AREA', 'PERIMETER', 'CIRCULARITY', # Geometric Properties
-    'ELLIPSE_MAJOR', 'ELLIPSE_MINOR', 'ELLIPSE_ASPECTRATIO', # Ellipse-fitting-based features
+    'AREA', 'PERIMETER', 'CIRCULARITY', # Geometric Properties
+    'ELLIPSE_ASPECTRATIO', # Ellipse-fitting-based features
     'SOLIDITY',
     # Motion Features
     'SPEED',  # Calculated 
@@ -43,7 +59,6 @@ features = [ # Time-based Features
 
 track_features = [ # Track-Level Statistics Features
     "TRACK_DISPLACEMENT", "TRACK_STD_SPEED",
-    "TOTAL_DISTANCE_TRAVELED", "CONFINEMENT_RATIO",
     "MEAN_DIRECTIONAL_CHANGE_RATE"
 ]
 

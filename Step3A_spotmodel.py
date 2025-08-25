@@ -72,14 +72,14 @@ class BiLSTMAttnModel(nn.Module):
 #64, 32
 #64, 16
 
-model = BiLSTMAttnModel(input_dim=FEATURE_LEN, hidden_dim=128, output_dim=3, dropout=0.5)
-class_weights = torch.tensor([1.0 / (y_encoded == i).sum().item() for i in range(3)])
-class_weights = class_weights / class_weights.sum()
-#class_weights[2] = 1.0
-print(class_weights)
-criterion = nn.CrossEntropyLoss(weight=class_weights)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.8, patience=10)
+# model = BiLSTMAttnModel(input_dim=FEATURE_LEN, hidden_dim=128, output_dim=3, dropout=0.5)
+# class_weights = torch.tensor([1.0 / (y_encoded == i).sum().item() for i in range(3)])
+# class_weights = class_weights / class_weights.sum()
+# #class_weights[2] = 1.0
+# print(class_weights)
+# criterion = nn.CrossEntropyLoss(weight=class_weights)
+# optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+# scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.8, patience=10)
 
 # ===== Training =====
 def train_model():
